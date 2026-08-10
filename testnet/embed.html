@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BTC Envelope (Testnet) — Generate & Embed</title>
+<style>
+  :root {
+    --bg: #0c0e12;
+    --surface: #151920;
+    --surface2: #1c222d;
+    --border: #2a3341;
+    --text: #e8edf5;
+    --muted: #8b97a8;
+    --accent: #f7931a;
+    --success: #2ecc71;
+    --danger: #e74c3c;
+    --radius: 14px;
+    --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(247,147,26,0.12), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 100%, rgba(41,98,255,0.06), transparent);
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  header { text-align: center; margin-bottom: 2rem; }
+  header .logo { font-size: 2.2rem; margin-bottom: 0.3rem; }
+  header h1 { font-size: 1.65rem; font-weight: 700; letter-spacing: -0.02em; }
+  header p { color: var(--muted); margin-top: 0.35rem; font-size: 0.95rem; }
+  nav {
+    display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1.75rem;
+  }
+  nav a {
+    color: var(--muted); text-decoration: none; font-size: 0.88rem;
+    padding: 0.4rem 0.9rem; border-radius: 8px; border: 1px solid var(--border);
+  }
+  nav a:hover { color: var(--text); border-color: var(--accent); }
+  nav a.active { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.35rem 1.4rem;
+    margin-bottom: 1.1rem;
+  }
+  .card h2 {
+    font-size: 0.95rem; font-weight: 600; margin-bottom: 1rem;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  label {
+    display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.3rem;
+  }
+  input[type=text], input[type=password], input[type=number], select, textarea {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 0.55rem 0.8rem; color: var(--text);
+    font-size: 0.95rem; font-family: inherit; margin-bottom: 0.85rem;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+  .row > * { flex: 1; min-width: 120px; }
+  .hint { font-size: 0.78rem; color: var(--muted); margin-top: -0.5rem; margin-bottom: 0.85rem; }
+
+  button, .btn {
+    appearance: none; border: none; border-radius: 9px;
+    padding: 0.6rem 1.15rem; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; font-family: inherit; transition: background .15s, transform .1s;
+  }
+  button:active { transform: scale(0.97); }
+  .btn-primary { background: var(--accent); color: #111; }
+  .btn-primary:hover { background: #ffaa33; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-ghost {
+    background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { background: #252d3a; }
+  .actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.5rem; }
+
+  .drop {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 1.5rem; text-align: center; cursor: pointer; position: relative;
+    transition: border-color .2s, background .2s;
+  }
+  .drop:hover, .drop.dragover { border-color: var(--accent); background: rgba(247,147,26,0.05); }
+  .drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .drop p { color: var(--muted); font-size: 0.88rem; margin-top: 0.3rem; }
+
+  .key-list { display: flex; flex-direction: column; gap: 0.65rem; }
+  .key-item {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 0.75rem 0.9rem; font-family: ui-monospace, Menlo, monospace; font-size: 0.82rem;
+  }
+  .key-item .addr { color: var(--accent); word-break: break-all; }
+  .key-item .meta { color: var(--muted); font-size: 0.75rem; margin-top: 0.25rem; }
+
+  .status {
+    margin-top: 1rem; padding: 0.8rem 1rem; border-radius: 10px;
+    background: var(--surface2); border: 1px solid var(--border);
+    font-size: 0.88rem; display: none;
+  }
+  .status.show { display: block; }
+  .status.ok { border-color: var(--success); color: #7dcea0; }
+  .status.err { border-color: var(--danger); color: #ff8a80; }
+
+  footer {
+    margin-top: 2.5rem; text-align: center; color: var(--muted); font-size: 0.78rem;
+  }
+  footer a { color: var(--accent); }
+  .spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.2); border-top-color: var(--accent);
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+    vertical-align: middle; margin-right: 0.35rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">₿</div>
+      <h1>BTC Envelope</h1>
+      <p>Generate keys and embed encrypted envelopes into image metadata</p>
+    </header>
+
+    <nav>
+      <a href="embed.html" class="active">Generate & Embed</a>
+      <a href="index.html">Recover</a>
+    </nav>
+
+    <!-- Network -->
+    <div class="card">
+      <h2>Network</h2>
+      <div class="row">
+        <div>
+          <label>Bitcoin network</label>
+          <select id="network">
+            <option value="mainnet">Mainnet (bc1q…)</option>
+            <option value="testnet" selected>Testnet (tb1q…)</option>
+            <option value="regtest">Regtest (bcrt1q…)</option>
+          </select>
+        </div>
+        <div>
+          <label>Number of keys</label>
+          <input type="number" id="keyCount" value="1" min="1" max="20" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Entropy -->
+    <div class="card">
+      <h2>Entropy (optional)</h2>
+      <label>Extra entropy — mixed with secure random (recommended)</label>
+      <input type="text" id="extraEntropy" placeholder="Keyboard mash, dice rolls, etc." />
+      <p class="hint">Mixed via SHA-256 with os-level randomness. Still produces unique keys each time.</p>
+      <label>Or deterministic seed (hex) — use only one key</label>
+      <input type="text" id="seedHex" placeholder="64 hex chars recommended" />
+      <p class="hint">SHA-256’d to 32 bytes. Same seed → same key. Leave empty for random.</p>
+    </div>
+
+    <!-- Password -->
+    <div class="card">
+      <h2>Encryption password</h2>
+      <label>Password to encrypt private keys</label>
+      <input type="password" id="password" placeholder="Strong unique password" />
+      <label>Confirm password</label>
+      <input type="password" id="password2" placeholder="Repeat password" />
+      <p class="hint">This password is required to unlock the WIF later. There is no recovery if lost.</p>
+    </div>
+
+    <!-- Carrier image -->
+    <div class="card">
+      <h2>Carrier image (PNG recommended)</h2>
+      <div class="drop" id="dropzone">
+        <strong>Drop PNG here or click to choose</strong>
+        <p>PNG works best. Other formats: use the Python tool.</p>
+        <input type="file" id="fileInput" accept="image/png,.png" />
+      </div>
+      <p class="hint" id="fileName" style="margin-top:0.75rem">No file selected — a blank PNG will be created.</p>
+    </div>
+
+    <!-- Actions -->
+    <div class="card">
+      <h2>Actions</h2>
+      <div class="actions">
+        <button class="btn-primary" id="btnGenerate">Generate keys only</button>
+        <button class="btn-primary" id="btnEmbed">Generate & embed into image</button>
+        <button class="btn-ghost" id="btnClear">Clear</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <!-- Results -->
+    <div class="card" id="resultsCard" style="display:none">
+      <h2>Generated envelopes</h2>
+      <div class="key-list" id="keyList"></div>
+      <div class="actions" style="margin-top:1rem">
+        <button class="btn-ghost" id="btnDownload" style="display:none">Download image</button>
+      </div>
+    </div>
+
+    <footer>
+      <p>All cryptography runs locally in your browser. Nothing is uploaded.<br>
+         Compatible with <code>embed_tool.py</code> and the <a href="index.html">Recover</a> page.<br>
+         Encryption: PBKDF2-HMAC-SHA256 (310k) + AES-256-GCM</p>
+    </footer>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  const PBKDF2_ITERS = 310000;
+  const META_KEY = "btc-envelopes";
+
+  // ---------- UI refs ----------
+  const $ = (id) => document.getElementById(id);
+  const networkEl = $("network");
+  const keyCountEl = $("keyCount");
+  const extraEl = $("extraEntropy");
+  const seedEl = $("seedHex");
+  const passEl = $("password");
+  const pass2El = $("password2");
+  const dropzone = $("dropzone");
+  const fileInput = $("fileInput");
+  const fileNameEl = $("fileName");
+  const statusEl = $("status");
+  const keyListEl = $("keyList");
+  const resultsCard = $("resultsCard");
+  const btnDownload = $("btnDownload");
+
+  let carrierBuffer = null; // ArrayBuffer of uploaded PNG
+  let lastPngBytes = null;  // result for download
+
+  function setStatus(msg, type) {
+    statusEl.textContent = msg;
+    statusEl.className = "status show " + (type || "");
+  }
+  function clearStatus() {
+    statusEl.className = "status";
+    statusEl.textContent = "";
+  }
+
+  // ---------- Crypto helpers ----------
+  function bytesToHex(b) {
+    return Array.from(b).map(x => x.toString(16).padStart(2, "0")).join("");
+  }
+  function hexToBytes(h) {
+    h = h.replace(/^0x/i, "").replace(/\s/g, "");
+    if (h.length % 2) throw new Error("Invalid hex");
+    const out = new Uint8Array(h.length / 2);
+    for (let i = 0; i < out.length; i++) out[i] = parseInt(h.substr(i * 2, 2), 16);
+    return out;
+  }
+  async function sha256(data) {
+    const buf = data instanceof ArrayBuffer ? data : data.buffer
+      ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
+      : new TextEncoder().encode(data);
+    return new Uint8Array(await crypto.subtle.digest("SHA-256", buf));
+  }
+
+  // ---------- Base58 / Bech32 / WIF ----------
+  const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  function b58encode(bytes) {
+    let n = 0n;
+    for (const b of bytes) n = (n << 8n) + BigInt(b);
+    let s = "";
+    while (n > 0n) {
+      const r = n % 58n;
+      n = n / 58n;
+      s = B58[Number(r)] + s;
+    }
+    for (const b of bytes) {
+      if (b === 0) s = "1" + s;
+      else break;
+    }
+    return s;
+  }
+  async function b58checkEncode(payload) {
+    const checksum = (await sha256(await sha256(payload))).slice(0, 4);
+    const full = new Uint8Array(payload.length + 4);
+    full.set(payload);
+    full.set(checksum, payload.length);
+    return b58encode(full);
+  }
+
+  const BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+  function bech32Polymod(values) {
+    const GEN = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+    let chk = 1;
+    for (const v of values) {
+      const b = chk >> 25;
+      chk = ((chk & 0x1ffffff) << 5) ^ v;
+      for (let i = 0; i < 5; i++) if ((b >> i) & 1) chk ^= GEN[i];
+    }
+    return chk;
+  }
+  function bech32HrpExpand(hrp) {
+    const ret = [];
+    for (const c of hrp) ret.push(c.charCodeAt(0) >> 5);
+    ret.push(0);
+    for (const c of hrp) ret.push(c.charCodeAt(0) & 31);
+    return ret;
+  }
+  function bech32Encode(hrp, data) {
+    const values = bech32HrpExpand(hrp).concat(data);
+    const polymod = bech32Polymod(values.concat([0,0,0,0,0,0])) ^ 1;
+    const checksum = [];
+    for (let i = 0; i < 6; i++) checksum.push((polymod >> 5 * (5 - i)) & 31);
+    return hrp + "1" + data.concat(checksum).map(d => BECH32_CHARSET[d]).join("");
+  }
+  function convertBits(data, fromBits, toBits, pad) {
+    let acc = 0, bits = 0;
+    const ret = [];
+    const maxv = (1 << toBits) - 1;
+    for (const value of data) {
+      acc = (acc << fromBits) | value;
+      bits += fromBits;
+      while (bits >= toBits) {
+        bits -= toBits;
+        ret.push((acc >> bits) & maxv);
+      }
+    }
+    if (pad && bits) ret.push((acc << (toBits - bits)) & maxv);
+    return ret;
+  }
+
+  // ---------- secp256k1 (compact BigInt implementation) ----------
+  // Curve: y² = x³ + 7 over Fp, p = 2^256 - 2^32 - 977
+  const SECP = (() => {
+    const p  = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2Fn;
+    const n  = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+    const Gx = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798n;
+    const Gy = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8n;
+    const a = 0n, b = 7n;
+
+    function mod(a, m = p) { const r = a % m; return r >= 0n ? r : r + m; }
+    function inverse(a, m = p) {
+      // Extended Euclidean
+      let lm = 1n, hm = 0n, low = mod(a, m), high = m;
+      while (low > 1n) {
+        const r = high / low;
+        const nm = hm - lm * r, nw = high - low * r;
+        hm = lm; lm = nm; high = low; low = nw;
+      }
+      return mod(lm, m);
+    }
+    function pointAdd(P, Q) {
+      if (!P) return Q;
+      if (!Q) return P;
+      const [x1, y1] = P, [x2, y2] = Q;
+      if (x1 === x2 && y1 !== y2) return null;
+      let m;
+      if (x1 === x2) {
+        m = mod(3n * x1 * x1 * inverse(2n * y1));
+      } else {
+        m = mod((y1 - y2) * inverse(x1 - x2));
+      }
+      const x3 = mod(m * m - x1 - x2);
+      const y3 = mod(m * (x1 - x3) - y1);
+      return [x3, y3];
+    }
+    function pointMul(k, P) {
+      let R = null;
+      let Q = P;
+      while (k > 0n) {
+        if (k & 1n) R = pointAdd(R, Q);
+        Q = pointAdd(Q, Q);
+        k >>= 1n;
+      }
+      return R;
+    }
+    function privToPub(privBytes) {
+      let d = 0n;
+      for (const b of privBytes) d = (d << 8n) + BigInt(b);
+      d = mod(d, n);
+      if (d === 0n) throw new Error("Invalid private key");
+      const pt = pointMul(d, [Gx, Gy]);
+      if (!pt) throw new Error("Point at infinity");
+      const [x, y] = pt;
+      // compressed
+      const out = new Uint8Array(33);
+      out[0] = (y & 1n) === 0n ? 0x02 : 0x03;
+      const xHex = x.toString(16).padStart(64, "0");
+      for (let i = 0; i < 32; i++) out[1 + i] = parseInt(xHex.substr(i * 2, 2), 16);
+      return out;
+    }
+    return { privToPub, n, mod };
+  })();
+
+  async function hash160(data) {
+    const sha = await sha256(data);
+    // RIPEMD160 - implement minimal or use a compact version
+    return ripemd160(sha);
+  }
+
+  // Minimal RIPEMD160
+  function ripemd160(msg) {
+    // msg: Uint8Array
+    const rl = [
+      0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,
+      7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8,
+      3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12,
+      1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2,
+      4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13
+    ];
+    const rr = [
+      5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12,
+      6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2,
+      15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13,
+      8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14,
+      12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11
+    ];
+    const sl = [
+      11,14,15,12,5,8,7,9,11,13,14,15,6,7,9,8,
+      7,6,8,13,11,9,7,15,7,12,15,9,11,7,13,12,
+      11,13,6,7,14,9,13,15,14,8,13,6,5,12,7,5,
+      11,12,14,15,14,15,9,8,9,14,5,6,8,6,5,12,
+      9,15,5,11,6,8,13,12,5,12,13,14,11,8,5,6
+    ];
+    const sr = [
+      8,9,9,11,13,15,15,5,7,7,8,11,14,14,12,6,
+      9,13,15,7,12,8,9,11,7,7,12,7,6,15,13,11,
+      9,7,15,11,8,6,6,14,12,13,5,14,13,13,7,5,
+      15,5,8,11,14,14,6,14,6,9,12,9,12,5,15,8,
+      8,5,12,9,12,5,14,6,8,13,6,5,15,13,11,11
+    ];
+    const Kl = [0x00000000, 0x5A827999, 0x6ED9EBA1, 0x8F1BBCDC, 0xA953FD4E];
+    const Kr = [0x50A28BE6, 0x5C4DD124, 0x6D703EF3, 0x7A6D76E9, 0x00000000];
+
+    function f(j, x, y, z) {
+      if (j < 16) return x ^ y ^ z;
+      if (j < 32) return (x & y) | (~x & z);
+      if (j < 48) return (x | ~y) ^ z;
+      if (j < 64) return (x & z) | (y & ~z);
+      return x ^ (y | ~z);
+    }
+    function rotl(x, n) { return ((x << n) | (x >>> (32 - n))) >>> 0; }
+
+    // padding
+    const len = msg.length;
+    const bitLen = len * 8;
+    const withPad = new Uint8Array(((len + 8) >> 6 << 6) + 64);
+    withPad.set(msg);
+    withPad[len] = 0x80;
+    const dv = new DataView(withPad.buffer);
+    dv.setUint32(withPad.length - 8, bitLen >>> 0, true);
+    dv.setUint32(withPad.length - 4, Math.floor(bitLen / 0x100000000), true);
+
+    let h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+
+    for (let i = 0; i < withPad.length; i += 64) {
+      const w = new Uint32Array(16);
+      for (let j = 0; j < 16; j++) w[j] = dv.getUint32(i + j * 4, true);
+      let al = h0, bl = h1, cl = h2, dl = h3, el = h4;
+      let ar = h0, br = h1, cr = h2, dr = h3, er = h4;
+      for (let j = 0; j < 80; j++) {
+        const t = (rotl((al + f(j, bl, cl, dl) + w[rl[j]] + Kl[j >> 4]) >>> 0, sl[j]) + el) >>> 0;
+        al = el; el = dl; dl = rotl(cl, 10); cl = bl; bl = t;
+        const t2 = (rotl((ar + f(79 - j, br, cr, dr) + w[rr[j]] + Kr[j >> 4]) >>> 0, sr[j]) + er) >>> 0;
+        ar = er; er = dr; dr = rotl(cr, 10); cr = br; br = t2;
+      }
+      const t = (h1 + cl + dr) >>> 0;
+      h1 = (h2 + dl + er) >>> 0;
+      h2 = (h3 + el + ar) >>> 0;
+      h3 = (h4 + al + br) >>> 0;
+      h4 = (h0 + bl + cr) >>> 0;
+      h0 = t;
+    }
+    const out = new Uint8Array(20);
+    const o = new DataView(out.buffer);
+    o.setUint32(0, h0, true);
+    o.setUint32(4, h1, true);
+    o.setUint32(8, h2, true);
+    o.setUint32(12, h3, true);
+    o.setUint32(16, h4, true);
+    return out;
+  }
+
+  // ---------- Key generation ----------
+  async function generateKeypair(network, extraEntropy, seedHex) {
+    let privBytes;
+    if (seedHex && seedHex.trim()) {
+      const cleaned = seedHex.trim().toLowerCase().replace(/^0x/, "").replace(/\s/g, "");
+      if (!/^[0-9a-f]+$/.test(cleaned)) throw new Error("Seed must be hex");
+      const raw = hexToBytes(cleaned.length % 2 ? "0" + cleaned : cleaned);
+      privBytes = await sha256(raw);
+    } else {
+      const base = crypto.getRandomValues(new Uint8Array(32));
+      if (extraEntropy && extraEntropy.length) {
+        const extra = new TextEncoder().encode(extraEntropy);
+        const combined = new Uint8Array(base.length + extra.length);
+        combined.set(base);
+        combined.set(extra, base.length);
+        privBytes = await sha256(combined);
+      } else {
+        privBytes = base;
+      }
+    }
+
+    // Ensure in range 1..n-1
+    let d = 0n;
+    for (const b of privBytes) d = (d << 8n) + BigInt(b);
+    d = SECP.mod(d, SECP.n);
+    if (d === 0n) d = 1n;
+    const privFixed = new Uint8Array(32);
+    let tmp = d;
+    for (let i = 31; i >= 0; i--) {
+      privFixed[i] = Number(tmp & 0xffn);
+      tmp >>= 8n;
+    }
+
+    const pub = SECP.privToPub(privFixed);
+    const h160 = await hash160(pub);
+    const hrp = { mainnet: "bc", testnet: "tb", regtest: "bcrt" }[network];
+    const data = [0].concat(convertBits(h160, 8, 5, true));
+    const addr = bech32Encode(hrp, data);
+
+    const version = network === "mainnet" ? 0x80 : 0xef;
+    const wifPayload = new Uint8Array(34);
+    wifPayload[0] = version;
+    wifPayload.set(privFixed, 1);
+    wifPayload[33] = 0x01; // compressed
+    const wif = await b58checkEncode(wifPayload);
+
+    return {
+      priv_hex: bytesToHex(privFixed),
+      wif,
+      addr,
+      pubkey_hex: bytesToHex(pub),
+      network
+    };
+  }
+
+  // ---------- Encryption (matches Python / recovery app) ----------
+  async function encryptPriv(password, wif, addr) {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const nonce = crypto.getRandomValues(new Uint8Array(12));
+    const encKey = await crypto.subtle.importKey(
+      "raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]
+    );
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt, iterations: PBKDF2_ITERS, hash: "SHA-256" },
+      encKey,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt"]
+    );
+    const ct = new Uint8Array(await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: nonce, additionalData: new TextEncoder().encode(addr) },
+      key,
+      new TextEncoder().encode(wif)
+    ));
+    const blob = new Uint8Array(16 + 12 + ct.length);
+    blob.set(salt, 0);
+    blob.set(nonce, 16);
+    blob.set(ct, 28);
+    return btoa(String.fromCharCode(...blob));
+  }
+
+  // ---------- PNG tEXt writer ----------
+  function crc32(buf) {
+    let c = 0xffffffff;
+    const table = crc32._t || (crc32._t = (() => {
+      const t = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c0 = n;
+        for (let k = 0; k < 8; k++) c0 = (c0 & 1) ? (0xedb88320 ^ (c0 >>> 1)) : (c0 >>> 1);
+        t[n] = c0;
+      }
+      return t;
+    })());
+    for (let i = 0; i < buf.length; i++) c = table[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  }
+
+  function makeTextChunk(key, value) {
+    const keyB = new TextEncoder().encode(key);
+    const valB = new TextEncoder().encode(value);
+    const data = new Uint8Array(keyB.length + 1 + valB.length);
+    data.set(keyB, 0);
+    data[keyB.length] = 0;
+    data.set(valB, keyB.length + 1);
+    const type = new TextEncoder().encode("tEXt");
+    const len = data.length;
+    const chunk = new Uint8Array(4 + 4 + len + 4);
+    const dv = new DataView(chunk.buffer);
+    dv.setUint32(0, len);
+    chunk.set(type, 4);
+    chunk.set(data, 8);
+    const crcBuf = new Uint8Array(4 + len);
+    crcBuf.set(type, 0);
+    crcBuf.set(data, 4);
+    dv.setUint32(8 + len, crc32(crcBuf));
+    return chunk;
+  }
+
+  function injectPngText(pngBuffer, key, value) {
+    const u8 = new Uint8Array(pngBuffer);
+    if (u8[0] !== 0x89 || u8[1] !== 0x50) throw new Error("Not a PNG file");
+    // Find IEND
+    let iend = -1;
+    for (let i = 8; i < u8.length - 11; i++) {
+      if (u8[i] === 0x49 && u8[i+1] === 0x45 && u8[i+2] === 0x4E && u8[i+3] === 0x44) {
+        iend = i - 4; // start of length field of IEND
+        break;
+      }
+    }
+    if (iend < 0) throw new Error("IEND not found");
+    // Remove existing btc-envelopes tEXt if present (simple: rebuild without it)
+    // For simplicity we just insert before IEND; duplicates are ok for our reader (last wins in some tools)
+    // Better: strip existing META_KEY tEXt
+    const chunks = [];
+    let offset = 8;
+    const sig = u8.slice(0, 8);
+    while (offset + 12 <= u8.length) {
+      const dv = new DataView(u8.buffer, u8.byteOffset + offset);
+      const len = dv.getUint32(0);
+      const type = String.fromCharCode(u8[offset+4], u8[offset+5], u8[offset+6], u8[offset+7]);
+      const total = 12 + len;
+      if (type === "tEXt") {
+        // check keyword
+        let nullPos = offset + 8;
+        while (nullPos < offset + 8 + len && u8[nullPos] !== 0) nullPos++;
+        const kw = new TextDecoder().decode(u8.subarray(offset + 8, nullPos));
+        if (kw === key) {
+          offset += total;
+          continue; // skip old
+        }
+      }
+      if (type === "IEND") break;
+      chunks.push(u8.slice(offset, offset + total));
+      offset += total;
+    }
+    const textChunk = makeTextChunk(key, value);
+    const iendChunk = new Uint8Array([0,0,0,0, 0x49,0x45,0x4E,0x44, 0xAE,0x42,0x60,0x82]);
+    let totalLen = 8 + textChunk.length + iendChunk.length;
+    for (const c of chunks) totalLen += c.length;
+    const out = new Uint8Array(totalLen);
+    let pos = 0;
+    out.set(sig, 0); pos = 8;
+    for (const c of chunks) { out.set(c, pos); pos += c.length; }
+    out.set(textChunk, pos); pos += textChunk.length;
+    out.set(iendChunk, pos);
+    return out;
+  }
+
+  function makeBlankPng() {
+    // 1x1 PNG (red pixel) minimal
+    const b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const bin = atob(b64);
+    const u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return u8.buffer;
+  }
+
+  // ---------- Main actions ----------
+  async function doGenerate(embed) {
+    clearStatus();
+    const network = networkEl.value;
+    const n = Math.max(1, Math.min(20, parseInt(keyCountEl.value, 10) || 1));
+    const extra = extraEl.value;
+    const seed = seedEl.value.trim();
+    const password = passEl.value;
+    const password2 = pass2El.value;
+
+    if (seed && n > 1) {
+      setStatus("When using a seed, only one key can be generated.", "err");
+      return;
+    }
+    if (embed) {
+      if (!password) { setStatus("Password required to embed.", "err"); return; }
+      if (password !== password2) { setStatus("Passwords do not match.", "err"); return; }
+    }
+
+    setStatus((embed ? "Generating & encrypting…" : "Generating…"), "");
+    $("btnGenerate").disabled = true;
+    $("btnEmbed").disabled = true;
+
+    try {
+      const envelopes = [];
+      const display = [];
+
+      for (let i = 0; i < n; i++) {
+        const kp = await generateKeypair(network, extra || null, seed || null);
+        display.push(kp);
+        if (embed) {
+          const enc = await encryptPriv(password, kp.wif, kp.addr);
+          envelopes.push({ addr: kp.addr, enc, ver: 1 });
+        }
+      }
+
+      // Show results
+      resultsCard.style.display = "block";
+      keyListEl.innerHTML = display.map((kp, i) => `
+        <div class="key-item">
+          <div class="addr">${kp.addr}</div>
+          <div class="meta">${kp.network} · WIF: ${kp.wif.slice(0, 8)}…${kp.wif.slice(-6)}</div>
+        </div>
+      `).join("");
+
+      if (embed) {
+        let pngBuf = carrierBuffer || makeBlankPng();
+        const json = JSON.stringify(envelopes);
+        lastPngBytes = injectPngText(pngBuf, META_KEY, json);
+        btnDownload.style.display = "inline-block";
+        setStatus(`Embedded ${envelopes.length} envelope(s) into PNG. Ready to download.`, "ok");
+      } else {
+        lastPngBytes = null;
+        btnDownload.style.display = "none";
+        setStatus(`Generated ${display.length} key(s). Not embedded (no password encryption).`, "ok");
+      }
+    } catch (e) {
+      console.error(e);
+      setStatus("Error: " + (e.message || e), "err");
+    } finally {
+      $("btnGenerate").disabled = false;
+      $("btnEmbed").disabled = false;
+    }
+  }
+
+  // ---------- Events ----------
+  $("btnGenerate").addEventListener("click", () => doGenerate(false));
+  $("btnEmbed").addEventListener("click", () => doGenerate(true));
+  $("btnClear").addEventListener("click", () => {
+    keyListEl.innerHTML = "";
+    resultsCard.style.display = "none";
+    lastPngBytes = null;
+    carrierBuffer = null;
+    fileNameEl.textContent = "No file selected — a blank PNG will be created.";
+    fileInput.value = "";
+    clearStatus();
+  });
+  btnDownload.addEventListener("click", () => {
+    if (!lastPngBytes) return;
+    const blob = new Blob([lastPngBytes], { type: "image/png" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "btc_envelope.png";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+
+  dropzone.addEventListener("dragover", e => { e.preventDefault(); dropzone.classList.add("dragover"); });
+  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+  dropzone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+    const f = e.dataTransfer.files[0];
+    if (f) loadFile(f);
+  });
+  fileInput.addEventListener("change", () => {
+    const f = fileInput.files[0];
+    if (f) loadFile(f);
+  });
+
+  async function loadFile(f) {
+    if (!f.name.toLowerCase().endsWith(".png") && f.type !== "image/png") {
+      setStatus("Please use a PNG file for browser embedding. Other formats: use embed_tool.py.", "err");
+      return;
+    }
+    carrierBuffer = await f.arrayBuffer();
+    fileNameEl.textContent = `Selected: ${f.name} (${(f.size / 1024).toFixed(1)} KB)`;
+    clearStatus();
+  }
+
+})();
+</script>
+</body>
+</html>

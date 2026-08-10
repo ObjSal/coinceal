@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BTC Envelope (Regtest) — Recover Keys</title>
+<style>
+  :root {
+    --bg: #0c0e12;
+    --surface: #151920;
+    --surface2: #1c222d;
+    --border: #2a3341;
+    --text: #e8edf5;
+    --muted: #8b97a8;
+    --accent: #f7931a;
+    --accent-dim: #c2740f;
+    --success: #2ecc71;
+    --danger: #e74c3c;
+    --radius: 14px;
+    --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(247,147,26,0.12), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 100%, rgba(41,98,255,0.06), transparent);
+  }
+
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  header .logo {
+    font-size: 2.4rem;
+    margin-bottom: 0.4rem;
+  }
+
+  header h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  header p {
+    color: var(--muted);
+    margin-top: 0.4rem;
+    font-size: 0.98rem;
+  }
+
+  .drop {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 2.75rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s, transform .15s;
+    position: relative;
+  }
+
+  .drop:hover, .drop.dragover {
+    border-color: var(--accent);
+    background: rgba(247,147,26,0.05);
+  }
+
+  .drop.dragover { transform: scale(1.01); }
+
+  .drop svg { width: 48px; height: 48px; margin-bottom: 0.75rem; opacity: 0.7; }
+  .drop h2 { font-size: 1.15rem; font-weight: 600; margin-bottom: 0.35rem; }
+  .drop p { color: var(--muted); font-size: 0.9rem; }
+
+  .drop input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .status {
+    margin-top: 1.25rem;
+    padding: 0.85rem 1.1rem;
+    border-radius: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    font-size: 0.9rem;
+    display: none;
+  }
+  .status.show { display: block; }
+  .status.error { border-color: var(--danger); color: #ff8a80; }
+  .status.ok { border-color: var(--success); color: #7dcea0; }
+
+  #envelopes {
+    margin-top: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.35rem;
+    transition: border-color .2s;
+  }
+
+  .card:hover { border-color: #3d4a5c; }
+
+  .card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .addr {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.92rem;
+    word-break: break-all;
+    color: var(--text);
+  }
+
+  .addr a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .addr a:hover { text-decoration: underline; }
+
+  .badge {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: var(--surface2);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .badge.funded {
+    background: rgba(46,204,113,0.15);
+    color: var(--success);
+  }
+
+  .balance {
+    margin-top: 0.65rem;
+    font-size: 1.35rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .balance .btc { color: var(--accent); }
+  .balance .sats { color: var(--muted); font-size: 0.85rem; font-weight: 400; margin-left: 0.4rem; }
+
+  .actions {
+    margin-top: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+  }
+
+  button, .btn {
+    appearance: none;
+    border: none;
+    border-radius: 9px;
+    padding: 0.55rem 1.05rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+    font-family: inherit;
+  }
+
+  button:active { transform: scale(0.97); }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #111;
+  }
+  .btn-primary:hover { background: #ffaa33; }
+
+  .btn-ghost {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { background: #252d3a; }
+
+  .unlock-panel {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    display: none;
+  }
+  .unlock-panel.open { display: block; }
+
+  .unlock-panel label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-bottom: 0.35rem;
+  }
+
+  .unlock-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .unlock-row input {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.55rem 0.8rem;
+    color: var(--text);
+    font-size: 0.95rem;
+    font-family: inherit;
+  }
+  .unlock-row input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .wif-box {
+    margin-top: 0.85rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.85rem;
+    word-break: break-all;
+    position: relative;
+  }
+
+  .wif-box .label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    margin-bottom: 0.35rem;
+  }
+
+  .copy-btn {
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+  }
+
+  .hint {
+    margin-top: 0.7rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  nav {
+    display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1.75rem;
+  }
+  nav a {
+    color: var(--muted); text-decoration: none; font-size: 0.88rem;
+    padding: 0.4rem 0.9rem; border-radius: 8px; border: 1px solid var(--border);
+  }
+  nav a:hover { color: var(--text); border-color: var(--accent); }
+  nav a.active { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
+
+  footer {
+    margin-top: 3.5rem;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+  footer a { color: var(--accent); }
+
+  .spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(255,255,255,0.2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 0.4rem;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 520px) {
+    .card-header { flex-direction: column; }
+    header h1 { font-size: 1.45rem; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">₿</div>
+      <h1>BTC Envelope <span style="color:var(--accent)">(Regtest)</span></h1>
+      <p>Drop an image that contains encrypted key envelopes.<br>
+         Addresses appear immediately — private keys unlock with your password.</p>
+    </header>
+
+    <nav>
+      <a href="embed.html">Generate & Embed</a>
+      <a href="index.html" class="active">Recover</a>
+    </nav>
+
+    <div class="drop" id="dropzone">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M12 16V4m0 0l-4 4m4-4l4 4"/>
+        <path d="M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17"/>
+      </svg>
+      <h2>Drop image here or click to choose</h2>
+      <p>Browser: PNG, JPEG, GIF, TIFF. Python tool also supports WebP &amp; HEIF.</p>
+      <input type="file" id="fileInput" accept="image/png,image/jpeg,image/gif,image/tiff,image/webp,image/heic,image/heif,.png,.jpg,.jpeg,.gif,.tif,.tiff,.webp,.heic,.heif" />
+    </div>
+
+    <div class="status" id="status"></div>
+
+    <div id="envelopes"></div>
+
+    <footer>
+      <p>All crypto runs locally in your browser. Nothing is uploaded.<br>
+         Compatible with the <code>embed_tool.py</code> Python companion.<br>
+         After unlocking, import the WIF into Electrum, Sparrow or any wallet that accepts single-key WIF.</p>
+    </footer>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  const META_KEY = "btc-envelopes";
+  const PBKDF2_ITERS = 310000;
+
+  const dropzone = document.getElementById("dropzone");
+  const fileInput = document.getElementById("fileInput");
+  const statusEl = document.getElementById("status");
+  const envelopesEl = document.getElementById("envelopes");
+
+  function setStatus(msg, type) {
+    statusEl.textContent = msg;
+    statusEl.className = "status show " + (type || "");
+  }
+
+  function clearStatus() {
+    statusEl.className = "status";
+    statusEl.textContent = "";
+  }
+
+  // ---------- PNG tEXt / iTXt parser ----------
+  function extractPngTextChunks(buffer) {
+    const view = new DataView(buffer);
+    const u8 = new Uint8Array(buffer);
+    if (u8[0] !== 0x89 || u8[1] !== 0x50) return null;
+
+    let offset = 8;
+    const texts = {};
+
+    while (offset + 12 <= buffer.byteLength) {
+      const length = view.getUint32(offset);
+      const type = String.fromCharCode(u8[offset+4], u8[offset+5], u8[offset+6], u8[offset+7]);
+      const dataStart = offset + 8;
+      const dataEnd = dataStart + length;
+      if (dataEnd + 4 > buffer.byteLength) break;
+
+      if (type === "tEXt") {
+        let nullPos = dataStart;
+        while (nullPos < dataEnd && u8[nullPos] !== 0) nullPos++;
+        const key = new TextDecoder().decode(u8.subarray(dataStart, nullPos));
+        const val = new TextDecoder().decode(u8.subarray(nullPos + 1, dataEnd));
+        texts[key] = val;
+      } else if (type === "iTXt") {
+        let p = dataStart;
+        while (p < dataEnd && u8[p] !== 0) p++;
+        const key = new TextDecoder().decode(u8.subarray(dataStart, p));
+        p++;
+        const compFlag = u8[p++];
+        p++; // compression method
+        while (p < dataEnd && u8[p] !== 0) p++; p++;
+        while (p < dataEnd && u8[p] !== 0) p++; p++;
+        if (compFlag === 0) {
+          texts[key] = new TextDecoder().decode(u8.subarray(p, dataEnd));
+        }
+      } else if (type === "IEND") {
+        break;
+      }
+      offset = dataEnd + 4;
+    }
+    return texts;
+  }
+
+  // ---------- Minimal JPEG EXIF UserComment extractor ----------
+  // Looks for APP1 "Exif\0\0" then walks IFDs for tag 0x9286 (UserComment)
+  function extractJpegUserComment(buffer) {
+    const u8 = new Uint8Array(buffer);
+    if (u8[0] !== 0xFF || u8[1] !== 0xD8) return null; // not JPEG
+
+    let offset = 2;
+    while (offset + 4 < u8.length) {
+      if (u8[offset] !== 0xFF) break;
+      const marker = u8[offset + 1];
+      if (marker === 0xDA) break; // SOS – image data starts
+      const segLen = (u8[offset + 2] << 8) | u8[offset + 3];
+      if (marker === 0xE1) { // APP1
+        const start = offset + 4;
+        // Check for "Exif\0\0"
+        if (u8[start] === 0x45 && u8[start+1] === 0x78 && u8[start+2] === 0x69 &&
+            u8[start+3] === 0x66 && u8[start+4] === 0 && u8[start+5] === 0) {
+          const tiffStart = start + 6;
+          const little = u8[tiffStart] === 0x49; // II = little endian
+          const get16 = (p) => little ? u8[p] | (u8[p+1] << 8) : (u8[p] << 8) | u8[p+1];
+          const get32 = (p) => little
+            ? u8[p] | (u8[p+1] << 8) | (u8[p+2] << 16) | (u8[p+3] << 24)
+            : (u8[p] << 24) | (u8[p+1] << 16) | (u8[p+2] << 8) | u8[p+3];
+
+          // IFD0 offset
+          let ifd0 = tiffStart + get32(tiffStart + 4);
+          // Walk IFD0 looking for ExifIFD pointer (tag 0x8769)
+          let num = get16(ifd0);
+          let exifIfd = 0;
+          for (let i = 0; i < num; i++) {
+            const entry = ifd0 + 2 + i * 12;
+            const tag = get16(entry);
+            if (tag === 0x8769) { // Exif IFD pointer
+              exifIfd = tiffStart + get32(entry + 8);
+              break;
+            }
+          }
+          if (!exifIfd) return null;
+
+          // Walk Exif IFD for UserComment (0x9286)
+          num = get16(exifIfd);
+          for (let i = 0; i < num; i++) {
+            const entry = exifIfd + 2 + i * 12;
+            const tag = get16(entry);
+            if (tag === 0x9286) {
+              const count = get32(entry + 4);
+              let valOffset = entry + 8;
+              if (count > 4) valOffset = tiffStart + get32(entry + 8);
+              const raw = u8.subarray(valOffset, valOffset + count);
+              // Decode UNICODE\0 + UTF-16LE or ASCII
+              if (raw[0] === 0x55 && raw[1] === 0x4E && raw[2] === 0x49) { // UNICODE
+                // piexif (and most writers) store the payload as UTF-16LE
+                // regardless of the TIFF header endianness. Always decode LE.
+                const chars = [];
+                for (let j = 8; j + 1 < raw.length; j += 2) {
+                  const c = raw[j] | (raw[j+1] << 8);
+                  if (c === 0) break;
+                  chars.push(String.fromCharCode(c));
+                }
+                return chars.join("");
+              }
+              if (raw[0] === 0x41 && raw[1] === 0x53) { // ASCII
+                return new TextDecoder().decode(raw.subarray(8)).replace(/\0+$/, "");
+              }
+              // raw fallback
+              return new TextDecoder().decode(raw).replace(/\0+$/, "");
+            }
+          }
+        }
+      }
+      offset += 2 + segLen;
+    }
+    return null;
+  }
+
+  // ---------- GIF Comment Extension parser ----------
+  function extractGifComment(buffer) {
+    const u8 = new Uint8Array(buffer);
+    // GIF87a / GIF89a
+    if (u8[0] !== 0x47 || u8[1] !== 0x49 || u8[2] !== 0x46) return null;
+
+    let offset = 6; // skip signature + version
+    // Logical Screen Descriptor = 7 bytes
+    offset += 7;
+    // Global Color Table?
+    const packed = u8[10];
+    if (packed & 0x80) {
+      const gctSize = 3 * (1 << ((packed & 0x07) + 1));
+      offset += gctSize;
+    }
+
+    // Now walk blocks looking for Extension Introducer 0x21 + Comment 0xFE
+    while (offset < u8.length) {
+      const b = u8[offset];
+      if (b === 0x3B) break; // Trailer
+      if (b === 0x2C) { // Image Descriptor – skip
+        offset += 10;
+        const ipacked = u8[offset - 1];
+        if (ipacked & 0x80) {
+          const lct = 3 * (1 << ((ipacked & 0x07) + 1));
+          offset += lct;
+        }
+        // LZW data
+        offset++; // LZW min code size
+        while (offset < u8.length) {
+          const sub = u8[offset++];
+          if (sub === 0) break;
+          offset += sub;
+        }
+        continue;
+      }
+      if (b === 0x21) { // Extension
+        const label = u8[offset + 1];
+        offset += 2;
+        if (label === 0xFE) { // Comment Extension
+          const parts = [];
+          while (offset < u8.length) {
+            const sub = u8[offset++];
+            if (sub === 0) break;
+            parts.push(new TextDecoder().decode(u8.subarray(offset, offset + sub)));
+            offset += sub;
+          }
+          return parts.join("");
+        }
+        // Other extensions – skip sub-blocks
+        while (offset < u8.length) {
+          const sub = u8[offset++];
+          if (sub === 0) break;
+          offset += sub;
+        }
+        continue;
+      }
+      // unknown – bail
+      break;
+    }
+    return null;
+  }
+
+  // ---------- TIFF ImageDescription (tag 270) parser ----------
+  function extractTiffImageDescription(buffer) {
+    const u8 = new Uint8Array(buffer);
+    if (u8.length < 8) return null;
+    // Byte order
+    const little = (u8[0] === 0x49 && u8[1] === 0x49); // II
+    const big    = (u8[0] === 0x4D && u8[1] === 0x4D); // MM
+    if (!little && !big) return null;
+    const get16 = (p) => little ? (u8[p] | (u8[p+1] << 8)) : ((u8[p] << 8) | u8[p+1]);
+    const get32 = (p) => little
+      ? (u8[p] | (u8[p+1] << 8) | (u8[p+2] << 16) | (u8[p+3] << 24)) >>> 0
+      : ((u8[p] << 24) | (u8[p+1] << 16) | (u8[p+2] << 8) | u8[p+3]) >>> 0;
+
+    // Magic must be 42
+    if (get16(2) !== 42) return null;
+
+    let ifdOffset = get32(4);
+    // Walk up to a few IFDs (usually one is enough)
+    for (let depth = 0; depth < 5 && ifdOffset > 0 && ifdOffset + 2 < u8.length; depth++) {
+      const numEntries = get16(ifdOffset);
+      for (let i = 0; i < numEntries; i++) {
+        const entry = ifdOffset + 2 + i * 12;
+        if (entry + 12 > u8.length) break;
+        const tag = get16(entry);
+        if (tag === 270) { // ImageDescription
+          const type = get16(entry + 2);   // 2 = ASCII
+          const count = get32(entry + 4);
+          let valOffset = entry + 8;
+          if (count > 4) valOffset = get32(entry + 8);
+          if (valOffset + count > u8.length) return null;
+          // ASCII string, may be null-terminated
+          let s = new TextDecoder().decode(u8.subarray(valOffset, valOffset + count));
+          s = s.replace(/\0+$/, "").trim();
+          return s || null;
+        }
+      }
+      // next IFD offset is after the entries
+      const nextOff = ifdOffset + 2 + numEntries * 12;
+      if (nextOff + 4 > u8.length) break;
+      ifdOffset = get32(nextOff);
+    }
+    return null;
+  }
+
+  // ---------- Main extract ----------
+  async function processFile(file) {
+    clearStatus();
+    envelopesEl.innerHTML = "";
+    setStatus("Reading image…");
+
+    const buffer = await file.arrayBuffer();
+    const name = (file.name || "").toLowerCase();
+    let envelopes = null;
+    let source = "";
+
+    // 1. PNG
+    const texts = extractPngTextChunks(buffer);
+    if (texts && texts[META_KEY]) {
+      try {
+        envelopes = JSON.parse(texts[META_KEY]);
+        source = "PNG tEXt metadata";
+      } catch (e) {
+        setStatus("PNG metadata present but invalid JSON", "error");
+        return;
+      }
+    }
+
+    // 2. JPEG EXIF UserComment
+    if (!envelopes) {
+      const uc = extractJpegUserComment(buffer);
+      if (uc) {
+        try {
+          const cleaned = uc.replace(/^\uFEFF/, "").trim();
+          envelopes = JSON.parse(cleaned);
+          source = "JPEG EXIF UserComment";
+        } catch (e) { /* not our data */ }
+      }
+    }
+
+    // 3. GIF Comment
+    if (!envelopes) {
+      const comment = extractGifComment(buffer);
+      if (comment) {
+        try {
+          envelopes = JSON.parse(comment.trim());
+          source = "GIF Comment Extension";
+        } catch (e) { /* not our data */ }
+      }
+    }
+
+    // 4. TIFF ImageDescription
+    if (!envelopes) {
+      const desc = extractTiffImageDescription(buffer);
+      if (desc) {
+        try {
+          envelopes = JSON.parse(desc);
+          source = "TIFF ImageDescription";
+        } catch (e) { /* not our data */ }
+      }
+    }
+
+    // HEIF / WebP still need the Python tool
+    if (!envelopes && (name.endsWith(".heic") || name.endsWith(".heif") || name.endsWith(".hif") || name.endsWith(".webp"))) {
+      setStatus("HEIF/WebP detected. Browser-side metadata parsing for these formats is not included. Use the Python tool:  python3 embed_tool.py list/extract yourfile", "error");
+      return;
+    }
+
+    if (!envelopes || !Array.isArray(envelopes) || envelopes.length === 0) {
+      setStatus("No BTC envelopes found in official metadata. Browser supports: PNG, JPEG, GIF, TIFF. For WebP / HEIF use the Python tool.", "error");
+      return;
+    }
+
+    setStatus(`Found ${envelopes.length} envelope(s) in ${source}`, "ok");
+    renderEnvelopes(envelopes);
+  }
+
+  // ---------- Balance ----------
+  async function fetchBalance(addr) {
+    try {
+      const r = await fetch(`https://invalid.local/regtest/${addr}`);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const j = await r.json();
+      const funded = j.chain_stats.funded_txo_sum || 0;
+      const spent = j.chain_stats.spent_txo_sum || 0;
+      return funded - spent;
+    } catch (e) {
+      console.warn("Balance fetch failed", e);
+      return null;
+    }
+  }
+
+  // ---------- Decrypt (Web Crypto) ----------
+  async function decryptWif(password, encB64, addr) {
+    const raw = Uint8Array.from(atob(encB64), c => c.charCodeAt(0));
+    if (raw.length < 16 + 12 + 16) throw new Error("Ciphertext too short");
+
+    const salt = raw.slice(0, 16);
+    const nonce = raw.slice(16, 28);
+    const ct = raw.slice(28);
+
+    const encKey = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(password),
+      "PBKDF2",
+      false,
+      ["deriveKey"]
+    );
+
+    const key = await crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt: salt,
+        iterations: PBKDF2_ITERS,
+        hash: "SHA-256"
+      },
+      encKey,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["decrypt"]
+    );
+
+    try {
+      const pt = await crypto.subtle.decrypt(
+        {
+          name: "AES-GCM",
+          iv: nonce,
+          additionalData: new TextEncoder().encode(addr)
+        },
+        key,
+        ct
+      );
+      return new TextDecoder().decode(pt);
+    } catch (e) {
+      throw new Error("Wrong password or corrupted data");
+    }
+  }
+
+  // ---------- Render ----------
+  function renderEnvelopes(envelopes) {
+    envelopesEl.innerHTML = "";
+
+    envelopes.forEach((env, idx) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.dataset.idx = idx;
+
+      const addr = env.addr || "unknown";
+
+      card.innerHTML = `
+        <div class="card-header">
+          <div class="addr">
+            <a href="https://mempool.space/testnet/address/${addr}" target="_blank" rel="noopener">${addr}</a>
+          </div>
+          <span class="badge" id="badge-${idx}">checking…</span>
+        </div>
+        <div class="balance" id="bal-${idx}"><span class="spinner"></span> Loading balance…</div>
+        <div class="actions">
+          <button class="btn-primary" data-action="unlock">Unlock private key</button>
+          <button class="btn-ghost" data-action="copy-addr">Copy address</button>
+        </div>
+        <div class="unlock-panel" id="panel-${idx}">
+          <label>Password</label>
+          <div class="unlock-row">
+            <input type="password" placeholder="Enter the password used at embedding" id="pw-${idx}" />
+            <button class="btn-primary" data-action="do-unlock">Decrypt</button>
+          </div>
+          <div id="result-${idx}"></div>
+        </div>
+      `;
+
+      envelopesEl.appendChild(card);
+
+      fetchBalance(addr).then(sats => {
+        const balEl = document.getElementById(`bal-${idx}`);
+        const badge = document.getElementById(`badge-${idx}`);
+        if (sats === null) {
+          balEl.textContent = "Balance unavailable (network)";
+          badge.textContent = "unknown";
+        } else {
+          // Display primarily in sats
+          balEl.innerHTML = `<span class="btc">${sats.toLocaleString()} sats</span>`;
+          if (sats > 0) {
+            badge.textContent = "funded";
+            badge.classList.add("funded");
+          } else {
+            badge.textContent = "empty";
+          }
+        }
+      });
+
+      card.addEventListener("click", async (ev) => {
+        const action = ev.target.dataset.action;
+        if (!action) return;
+
+        if (action === "unlock") {
+          const panel = document.getElementById(`panel-${idx}`);
+          panel.classList.toggle("open");
+          if (panel.classList.contains("open")) {
+            document.getElementById(`pw-${idx}`).focus();
+          }
+        }
+
+        if (action === "copy-addr") {
+          await navigator.clipboard.writeText(addr);
+          ev.target.textContent = "Copied!";
+          setTimeout(() => ev.target.textContent = "Copy address", 1500);
+        }
+
+        if (action === "do-unlock") {
+          const pw = document.getElementById(`pw-${idx}`).value;
+          const resultEl = document.getElementById(`result-${idx}`);
+          if (!pw) {
+            resultEl.innerHTML = `<p class="hint" style="color:var(--danger)">Password required</p>`;
+            return;
+          }
+          resultEl.innerHTML = `<p class="hint"><span class="spinner"></span> Decrypting…</p>`;
+          try {
+            const wif = await decryptWif(pw, env.enc, addr);
+            resultEl.innerHTML = `
+              <div class="wif-box">
+                <div class="label">Private key (WIF) — keep secret</div>
+                <div id="wif-val-${idx}">${wif}</div>
+                <button class="btn-ghost copy-btn" data-action="copy-wif">Copy</button>
+              </div>
+              <p class="hint">
+                Import this WIF into <strong>Electrum</strong> (Wallet → New → Import Bitcoin addresses or private keys),
+                <strong>Sparrow</strong>, BlueWallet, or any wallet that accepts a single compressed WIF.
+                After import you can spend the funds.
+              </p>
+            `;
+          } catch (e) {
+            resultEl.innerHTML = `<p class="hint" style="color:var(--danger)">${e.message}</p>`;
+          }
+        }
+
+        if (action === "copy-wif") {
+          const val = document.getElementById(`wif-val-${idx}`).textContent;
+          await navigator.clipboard.writeText(val);
+          ev.target.textContent = "Copied!";
+          setTimeout(() => ev.target.textContent = "Copy", 1500);
+        }
+      });
+    });
+  }
+
+  // ---------- Drag & drop / file ----------
+  dropzone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  });
+  dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+  dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropzone.classList.remove("dragover");
+    const f = e.dataTransfer.files[0];
+    if (f) processFile(f);
+  });
+
+  fileInput.addEventListener("change", () => {
+    const f = fileInput.files[0];
+    if (f) processFile(f);
+  });
+
+})();
+</script>
+</body>
+</html>
