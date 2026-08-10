@@ -22,6 +22,9 @@ pip install pillow cryptography ecdsa piexif pillow-heif
 python3 embed_tool.py list test_png.png
 python3 embed_tool.py extract test_png.png -p testpass123
 
+# Regression tests (envelope shape, round-trip, wrong-pw, legacy fallback, seed determinism)
+python3 test_envelope.py
+
 # Full CLI
 python3 embed_tool.py generate [-n N] [--network mainnet|testnet|regtest] [--extra STR] [--seed HEX]
 python3 embed_tool.py embed -i IMG -o OUT -p PASS [-n N] [--wif WIF --addr ADDR] [--keep]
@@ -33,12 +36,18 @@ The web apps run by opening the HTML file directly in a browser — no server. N
 
 The encryption scheme is implemented **twice** (Python `cryptography` lib and browser Web Crypto API) and must stay byte-compatible, or images embedded by one tool become unrecoverable by the other:
 
-- Password → PBKDF2-HMAC-SHA256, **310,000 iterations**, 16-byte salt → 32-byte AES key
+- Password → PBKDF2-HMAC-SHA256, **600,000 iterations** (recorded per-envelope as `iters`), 16-byte salt → 32-byte AES key
 - AES-256-GCM, 12-byte nonce, **AAD = the Bitcoin address string** (binds ciphertext to its address)
 - Stored blob: `base64(salt ‖ nonce ‖ ciphertext+tag)`
-- Envelope JSON (a top-level array): `[{"addr": "bc1q…", "enc": "base64…", "ver": 1}]`
+- Envelope JSON (a top-level array): `[{"addr": "bc1q…", "enc": "base64…", "ver": 2, "iters": 600000}]`
 
-Any change to iterations, salt/nonce sizes, AAD, blob layout, or envelope schema must be made in `embed_tool.py`, `embed.html`, `index.html`, **and** all copies in `testnet/` and `regtest/` (see below). The `ver` field exists for schema evolution.
+**Iteration count is data, not a hardcoded reader constant.** Encryption uses the current default (600k) and writes it into each envelope. Decryption reads `iters` from the envelope and falls back to **310,000** for legacy `ver: 1` envelopes that predate the field (this is why the bundled `test_*` images, which are `ver: 1`, still decrypt). To raise the default again, change `PBKDF2_ITERS` on the write side only; never hardcode it on the read side.
+
+Any change to salt/nonce sizes, AAD, blob layout, or envelope schema must be made in `embed_tool.py`, `embed.html`, `index.html`, **and** all copies in `testnet/` and `regtest/`, then cross-verified: a Python-made envelope must decrypt in the browser and vice-versa. `test_envelope.py` covers the Python side; the browser side must be checked against the same crypto (Web Crypto `deriveKey` with the envelope's `iters`).
+
+## Untrusted input: escape envelope fields in the recovery UI
+
+`index.html` parses envelope JSON out of an **attacker-supplied image** and renders `addr`/`wif` into the DOM. These must be escaped (`escapeHtml()` for text, `encodeURIComponent()` for URLs) — never interpolated raw into `innerHTML` — or a crafted image is a stored-XSS vector on a page that handles private keys. `embed.html` renders only locally generated values and is not exposed to this.
 
 ## Metadata fields per format
 

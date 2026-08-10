@@ -219,7 +219,7 @@
 (function () {
   "use strict";
 
-  const PBKDF2_ITERS = 310000;
+  const PBKDF2_ITERS = 600000;
   const META_KEY = "btc-envelopes";
 
   // ---------- UI refs ----------
@@ -695,7 +695,7 @@
         display.push(kp);
         if (embed) {
           const enc = await encryptPriv(password, kp.wif, kp.addr);
-          envelopes.push({ addr: kp.addr, enc, ver: 1 });
+          envelopes.push({ addr: kp.addr, enc, ver: 2, iters: PBKDF2_ITERS });
         }
       }
 

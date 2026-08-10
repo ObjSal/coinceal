@@ -203,6 +203,14 @@ def generate_keypair(
         else:
             priv_bytes = base
 
+    # Reduce into the valid scalar range [1, n-1] so an identical seed
+    # yields the same key as the browser app (which reduces mod n). For
+    # random keys this is a no-op with overwhelming probability.
+    _n = SECP256k1.order
+    _d = int.from_bytes(priv_bytes, "big") % _n
+    if _d == 0:
+        _d = 1
+    priv_bytes = _d.to_bytes(32, "big")
     sk = SigningKey.from_string(priv_bytes, curve=SECP256k1)
     priv = sk.to_string()
     vk = sk.get_verifying_key()
@@ -228,7 +236,7 @@ def generate_keypair(
 # Encryption (matches Web Crypto companion)
 # ---------------------------------------------------------------------------
 
-PBKDF2_ITERS = 310_000
+PBKDF2_ITERS = 600_000
 META_KEY = "btc-envelopes"          # PNG tEXt key
 USERCOMMENT_PREFIX = b"UNICODE\x00" # EXIF UserComment charset marker
 
@@ -247,7 +255,7 @@ def encrypt_priv(password: str, wif: str, addr: str) -> str:
     blob = salt + nonce + ct
     return base64.b64encode(blob).decode("ascii")
 
-def decrypt_priv(password: str, enc_b64: str, addr: str) -> str:
+def decrypt_priv(password: str, enc_b64: str, addr: str, iters: int = 310_000) -> str:
     raw = base64.b64decode(enc_b64)
     if len(raw) < 16 + 12 + 16:
         raise ValueError("Ciphertext too short")
@@ -256,7 +264,7 @@ def decrypt_priv(password: str, enc_b64: str, addr: str) -> str:
         algorithm=hashes.SHA256(),
         length=32,
         salt=salt,
-        iterations=PBKDF2_ITERS,
+        iterations=iters,
     )
     key = kdf.derive(password.encode("utf-8"))
     aesgcm = AESGCM(key)
@@ -276,7 +284,8 @@ def make_envelope(password: str, keypair: dict[str, str]) -> dict[str, str]:
     return {
         "addr": keypair["addr"],
         "enc": enc,
-        "ver": 1,
+        "ver": 2,
+        "iters": PBKDF2_ITERS,
     }
 
 def envelopes_to_json(envelopes: list[dict]) -> str:
@@ -597,7 +606,7 @@ def cmd_extract(args: argparse.Namespace) -> None:
             print(f"  [{i}] {addr}  (no encrypted payload)")
             continue
         try:
-            wif = decrypt_priv(password, enc, addr)
+            wif = decrypt_priv(password, enc, addr, e.get("iters", 310_000))
             print(f"  [{i}] {addr}")
             print(f"      WIF : {wif}")
             print()

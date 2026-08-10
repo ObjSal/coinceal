@@ -345,7 +345,15 @@
   "use strict";
 
   const META_KEY = "btc-envelopes";
-  const PBKDF2_ITERS = 310000;
+  const LEGACY_PBKDF2_ITERS = 310000; // ver:1 envelopes used a fixed count; ver:2+ carry their own `iters`
+
+  // Envelope fields come from an untrusted, attacker-supplied image, so escape
+  // any value before inserting it into innerHTML.
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
+  }
 
   const dropzone = document.getElementById("dropzone");
   const fileInput = document.getElementById("fileInput");
@@ -661,7 +669,7 @@
   // ---------- Balance ----------
   async function fetchBalance(addr) {
     try {
-      const r = await fetch(`https://mempool.space/testnet/api/address/${addr}`);
+      const r = await fetch(`https://mempool.space/testnet/api/address/${encodeURIComponent(addr)}`);
       if (!r.ok) throw new Error("HTTP " + r.status);
       const j = await r.json();
       const funded = j.chain_stats.funded_txo_sum || 0;
@@ -674,7 +682,7 @@
   }
 
   // ---------- Decrypt (Web Crypto) ----------
-  async function decryptWif(password, encB64, addr) {
+  async function decryptWif(password, encB64, addr, iters) {
     const raw = Uint8Array.from(atob(encB64), c => c.charCodeAt(0));
     if (raw.length < 16 + 12 + 16) throw new Error("Ciphertext too short");
 
@@ -694,7 +702,7 @@
       {
         name: "PBKDF2",
         salt: salt,
-        iterations: PBKDF2_ITERS,
+        iterations: iters,
         hash: "SHA-256"
       },
       encKey,
@@ -733,7 +741,7 @@
       card.innerHTML = `
         <div class="card-header">
           <div class="addr">
-            <a href="https://mempool.space/testnet/address/${addr}" target="_blank" rel="noopener">${addr}</a>
+            <a href="https://mempool.space/testnet/address/${encodeURIComponent(addr)}" target="_blank" rel="noopener">${escapeHtml(addr)}</a>
           </div>
           <span class="badge" id="badge-${idx}">checking…</span>
         </div>
@@ -799,11 +807,11 @@
           }
           resultEl.innerHTML = `<p class="hint"><span class="spinner"></span> Decrypting…</p>`;
           try {
-            const wif = await decryptWif(pw, env.enc, addr);
+            const wif = await decryptWif(pw, env.enc, addr, env.iters || LEGACY_PBKDF2_ITERS);
             resultEl.innerHTML = `
               <div class="wif-box">
                 <div class="label">Private key (WIF) — keep secret</div>
-                <div id="wif-val-${idx}">${wif}</div>
+                <div id="wif-val-${idx}">${escapeHtml(wif)}</div>
                 <button class="btn-ghost copy-btn" data-action="copy-wif">Copy</button>
               </div>
               <p class="hint">
@@ -813,7 +821,7 @@
               </p>
             `;
           } catch (e) {
-            resultEl.innerHTML = `<p class="hint" style="color:var(--danger)">${e.message}</p>`;
+            resultEl.innerHTML = `<p class="hint" style="color:var(--danger)">${escapeHtml(e.message)}</p>`;
           }
         }
 

@@ -66,10 +66,13 @@ Browser embedding writes **PNG** metadata only. For JPEG / GIF / TIFF / WebP / H
 
 ## Encryption (identical in Python & browser)
 
-- Password → PBKDF2-HMAC-SHA256 (310 000 iterations, 16-byte salt) → 32-byte AES key
+- Password → PBKDF2-HMAC-SHA256 (600 000 iterations, 16-byte salt) → 32-byte AES key
 - AES-256-GCM (12-byte nonce)
 - Additional authenticated data = the Bitcoin address
 - Stored as base64(salt ‖ nonce ‖ ciphertext+tag)
+
+The PBKDF2 iteration count is recorded in each envelope (`iters`), so the count
+can be raised in future without breaking recovery of already-created images.
 
 ## Envelope JSON (stored in the metadata field)
 
@@ -78,13 +81,21 @@ Browser embedding writes **PNG** metadata only. For JPEG / GIF / TIFF / WebP / H
   {
     "addr": "bc1q…",
     "enc": "base64…",
-    "ver": 1
+    "ver": 2,
+    "iters": 600000
   }
 ]
 ```
 
 Addresses stay public so balances can be shown without the password.  
 Only the private key (compressed WIF) is encrypted.
+
+### Backward compatibility
+
+Older `ver: 1` envelopes have no `iters` field; readers (CLI and web) fall back
+to **310 000** iterations for those, so images made before this change still
+decrypt. New images are written as `ver: 2` with `iters: 600000`. The bundled
+`test_*` sample images are legacy `ver: 1` (310 000) and still recover normally.
 
 ## Test images
 
