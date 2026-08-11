@@ -1,12 +1,12 @@
-# BTC Envelope
+# Coinceal
 
-Embed encrypted Bitcoin private-key envelopes into **official image metadata** and recover them with a beautiful offline-friendly web app.
+**Hide Bitcoin in a photo.** Coinceal embeds encrypted Bitcoin private-key envelopes into **official image metadata** — an ordinary-looking image that secretly carries the keys — and recovers them with a beautiful offline-friendly web app.
 
 ## What you get
 
 | File | Purpose |
 |------|---------|
-| `embed_tool.py` | CLI to generate P2WPKH keys and embed encrypted envelopes into image metadata |
+| `coinceal.py` | CLI to generate P2WPKH keys and embed encrypted envelopes into image metadata |
 | `embed.html` | **Standalone web app** — generate keys & embed into PNG (same crypto as the CLI) |
 | `index.html` | **Standalone web app** — recover: drop image → balances → unlock WIF with password |
 | `test_*.png/jpg/gif/heic/webp/tiff` | Sample images already containing one encrypted envelope (password: `testpass123`) |
@@ -16,7 +16,7 @@ Embed encrypted Bitcoin private-key envelopes into **official image metadata** a
 
 | Format | Field used | Browser support in `index.html` |
 |--------|------------|---------------------------------|
-| **PNG**  | tEXt chunk `btc-envelopes` | ✅ |
+| **PNG**  | tEXt chunk `coinceal` | ✅ |
 | **JPEG** | EXIF UserComment (UNICODE) | ✅ |
 | **GIF**  | Comment Extension | ✅ |
 | **TIFF** | ImageDescription (tag 270) | ✅ |
@@ -36,14 +36,14 @@ pip install pillow cryptography ecdsa piexif pillow-heif
 
 ```bash
 # PNG (recommended)
-python3 embed_tool.py embed -i photo.png  -o gift.png  -p 'your strong password' -n 2
+python3 coinceal.py embed -i photo.png  -o gift.png  -p 'your strong password' -n 2
 
 # JPEG / WebP / TIFF / GIF / HEIF
-python3 embed_tool.py embed -i photo.jpg  -o gift.jpg  -p 'pass' -n 1
-python3 embed_tool.py embed -i photo.webp -o gift.webp -p 'pass' -n 1
-python3 embed_tool.py embed -i photo.tiff -o gift.tiff -p 'pass' -n 1
-python3 embed_tool.py embed -i photo.gif  -o gift.gif  -p 'pass' -n 1
-python3 embed_tool.py embed -i photo.heic -o gift.heic -p 'pass' -n 1
+python3 coinceal.py embed -i photo.jpg  -o gift.jpg  -p 'pass' -n 1
+python3 coinceal.py embed -i photo.webp -o gift.webp -p 'pass' -n 1
+python3 coinceal.py embed -i photo.tiff -o gift.tiff -p 'pass' -n 1
+python3 coinceal.py embed -i photo.gif  -o gift.gif  -p 'pass' -n 1
+python3 coinceal.py embed -i photo.heic -o gift.heic -p 'pass' -n 1
 ```
 
 ### 3. Web apps (standalone, no server)
@@ -54,8 +54,8 @@ Both pages are single self-contained HTML files (no external scripts).
 - Choose network, optional extra entropy / seed
 - Set a password
 - Optionally drop a carrier PNG (or a blank one is created)
-- **Generate & embed** → download `btc_envelope.png`
-- Works with the Recover page and with `embed_tool.py extract`
+- **Generate & embed** → download `coinceal.png`
+- Works with the Recover page and with `coinceal.py extract`
 
 **Recover** — open `index.html`:
 - Drop the image → addresses + live balances appear immediately
@@ -109,17 +109,17 @@ Only the private key (compressed WIF) is encrypted.
 | `test_webp.webp`| WebP | `testpass123` |
 
 ```bash
-python3 embed_tool.py list test_jpg.jpg
-python3 embed_tool.py extract test_jpg.jpg -p testpass123
+python3 coinceal.py list test_jpg.jpg
+python3 coinceal.py extract test_jpg.jpg -p testpass123
 ```
 
 ## CLI reference
 
 ```
-python3 embed_tool.py generate [-n N] [--network mainnet|testnet|regtest] [--extra STRING] [--seed HEX]
-python3 embed_tool.py embed -i IMG -o OUT -p PASS [-n N] [--network ...] [--extra ...] [--seed ...] [--keep]
-python3 embed_tool.py list IMG
-python3 embed_tool.py extract IMG -p PASS
+python3 coinceal.py generate [-n N] [--network mainnet|testnet|regtest] [--extra STRING] [--seed HEX]
+python3 coinceal.py embed -i IMG -o OUT -p PASS [-n N] [--network ...] [--extra ...] [--seed ...] [--keep]
+python3 coinceal.py list IMG
+python3 coinceal.py extract IMG -p PASS
 ```
 
 ## Network variants
@@ -130,7 +130,7 @@ python3 embed_tool.py extract IMG -p PASS
 | `testnet/` | testnet | `tb1q…` | mempool.space/testnet |
 | `regtest/` | regtest | `bcrt1q…` | none (local only) |
 
-Each folder contains its own `embed_tool.py` (default network already set) and `index.html`.
+Each folder contains its own `coinceal.py` (default network already set) and `index.html`.
 
 ## Encryption vs gpg / age
 

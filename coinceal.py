@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-BTC Envelope Embedder
+Coinceal Embedder
 =====================
 Generate single P2WPKH (native SegWit) Bitcoin keypairs and embed encrypted
 "envelopes" {address, private_key} into official image metadata fields.
@@ -9,7 +9,7 @@ Encryption: PBKDF2-HMAC-SHA256 (310k iterations) + AES-256-GCM
 Compatible with the companion web app (same scheme via Web Crypto API).
 
 Supported formats & official fields used:
-  PNG   → tEXt chunk named "btc-envelopes"
+  PNG   → tEXt chunk named "coinceal"
   JPEG  → EXIF UserComment (UNICODE)
   WEBP  → EXIF UserComment (UNICODE)
   TIFF  → ImageDescription (tag 270)
@@ -18,12 +18,12 @@ Supported formats & official fields used:
   BMP   → not supported (no standard text metadata fields)
 
 Usage examples:
-  python3 embed_tool.py generate
-  python3 embed_tool.py embed -i photo.png  -o secret.png  -p 'correct horse battery' -n 2
-  python3 embed_tool.py embed -i photo.jpg  -o secret.jpg  -p 'pass' -n 1
-  python3 embed_tool.py embed -i photo.heic -o secret.heic -p 'pass' -n 1
-  python3 embed_tool.py list secret.png
-  python3 embed_tool.py extract secret.png -p 'correct horse battery'
+  python3 coinceal.py generate
+  python3 coinceal.py embed -i photo.png  -o secret.png  -p 'correct horse battery' -n 2
+  python3 coinceal.py embed -i photo.jpg  -o secret.jpg  -p 'pass' -n 1
+  python3 coinceal.py embed -i photo.heic -o secret.heic -p 'pass' -n 1
+  python3 coinceal.py list secret.png
+  python3 coinceal.py extract secret.png -p 'correct horse battery'
 """
 
 from __future__ import annotations
@@ -239,7 +239,7 @@ def generate_keypair(
 # ---------------------------------------------------------------------------
 
 PBKDF2_ITERS = 600_000
-META_KEY = "btc-envelopes"          # PNG tEXt key
+META_KEY = "coinceal"          # PNG tEXt key
 USERCOMMENT_PREFIX = b"UNICODE\x00" # EXIF UserComment charset marker
 
 def encrypt_priv(password: str, wif: str, addr: str) -> str:
@@ -455,7 +455,7 @@ def write_envelopes(src: Path, dst: Path, envelopes: list[dict]) -> None:
             if k not in exif_dict or exif_dict[k] is None:
                 exif_dict[k] = {}
         exif_dict["Exif"][piexif.ExifIFD.UserComment] = _exif_usercomment_encode(json_str)
-        exif_dict["0th"][piexif.ImageIFD.ImageDescription] = b"BTC Envelope"
+        exif_dict["0th"][piexif.ImageIFD.ImageDescription] = b"Coinceal"
         exif_bytes = piexif.dump(exif_dict)
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
@@ -475,7 +475,7 @@ def write_envelopes(src: Path, dst: Path, envelopes: list[dict]) -> None:
             if k not in exif_dict or exif_dict[k] is None:
                 exif_dict[k] = {}
         exif_dict["Exif"][piexif.ExifIFD.UserComment] = _exif_usercomment_encode(json_str)
-        exif_dict["0th"][piexif.ImageIFD.ImageDescription] = b"BTC Envelope"
+        exif_dict["0th"][piexif.ImageIFD.ImageDescription] = b"Coinceal"
         exif_bytes = piexif.dump(exif_dict)
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>BTC Envelope — Generate & Embed</title>
+<title>Coinceal — Generate & Embed</title>
 <style>
   :root {
     --bg: #0c0e12;
@@ -128,7 +128,7 @@
   <div class="wrap">
     <header>
       <div class="logo">₿</div>
-      <h1>BTC Envelope</h1>
+      <h1>Coinceal</h1>
       <p>Generate keys and embed encrypted envelopes into image metadata</p>
     </header>
 
@@ -210,7 +210,7 @@
 
     <footer>
       <p>All cryptography runs locally in your browser. Nothing is uploaded.<br>
-         Compatible with <code>embed_tool.py</code> and the <a href="index.html">Recover</a> page.<br>
+         Compatible with <code>coinceal.py</code> and the <a href="index.html">Recover</a> page.<br>
          Encryption: PBKDF2-HMAC-SHA256 (310k) + AES-256-GCM</p>
     </footer>
   </div>
@@ -220,7 +220,7 @@
   "use strict";
 
   const PBKDF2_ITERS = 600000;
-  const META_KEY = "btc-envelopes";
+  const META_KEY = "coinceal";
 
   // ---------- UI refs ----------
   const $ = (id) => document.getElementById(id);
@@ -622,7 +622,7 @@
       }
     }
     if (iend < 0) throw new Error("IEND not found");
-    // Remove existing btc-envelopes tEXt if present (simple: rebuild without it)
+    // Remove existing coinceal tEXt if present (simple: rebuild without it)
     // For simplicity we just insert before IEND; duplicates are ok for our reader (last wins in some tools)
     // Better: strip existing META_KEY tEXt
     const chunks = [];
@@ -751,7 +751,7 @@
     const blob = new Blob([lastPngBytes], { type: "image/png" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "btc_envelope.png";
+    a.download = "coinceal.png";
     a.click();
     URL.revokeObjectURL(a.href);
   });
@@ -771,7 +771,7 @@
 
   async function loadFile(f) {
     if (!f.name.toLowerCase().endsWith(".png") && f.type !== "image/png") {
-      setStatus("Please use a PNG file for browser embedding. Other formats: use embed_tool.py.", "err");
+      setStatus("Please use a PNG file for browser embedding. Other formats: use coinceal.py.", "err");
       return;
     }
     carrierBuffer = await f.arrayBuffer();

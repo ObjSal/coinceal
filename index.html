@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>BTC Envelope — Recover Keys from Images</title>
+<title>Coinceal — Recover Keys from Images</title>
 <style>
   :root {
     --bg: #0c0e12;
@@ -316,7 +316,7 @@
   <div class="wrap">
     <header>
       <div class="logo">₿</div>
-      <h1>BTC Envelope</h1>
+      <h1>Coinceal</h1>
       <p>Drop an image that contains encrypted key envelopes.<br>
          Addresses appear immediately — private keys unlock with your password.</p>
     </header>
@@ -342,7 +342,7 @@
 
     <footer>
       <p>All crypto runs locally in your browser. Nothing is uploaded.<br>
-         Compatible with the <code>embed_tool.py</code> Python companion.<br>
+         Compatible with the <code>coinceal.py</code> Python companion.<br>
          After unlocking, import the WIF into Electrum, Sparrow or any wallet that accepts single-key WIF.</p>
     </footer>
   </div>
@@ -351,7 +351,7 @@
 (function () {
   "use strict";
 
-  const META_KEY = "btc-envelopes";
+  const META_KEY = "coinceal";
   const PBKDF2_ITERS = 600000;
 
   // Envelope fields come from an untrusted, attacker-supplied image, so escape
@@ -660,12 +660,12 @@
 
     // HEIF / WebP still need the Python tool
     if (!envelopes && (name.endsWith(".heic") || name.endsWith(".heif") || name.endsWith(".hif") || name.endsWith(".webp"))) {
-      setStatus("HEIF/WebP detected. Browser-side metadata parsing for these formats is not included. Use the Python tool:  python3 embed_tool.py list/extract yourfile", "error");
+      setStatus("HEIF/WebP detected. Browser-side metadata parsing for these formats is not included. Use the Python tool:  python3 coinceal.py list/extract yourfile", "error");
       return;
     }
 
     if (!envelopes || !Array.isArray(envelopes) || envelopes.length === 0) {
-      setStatus("No BTC envelopes found in official metadata. Browser supports: PNG, JPEG, GIF, TIFF. For WebP / HEIF use the Python tool.", "error");
+      setStatus("No Coinceal envelopes found in official metadata. Browser supports: PNG, JPEG, GIF, TIFF. For WebP / HEIF use the Python tool.", "error");
       return;
     }
 

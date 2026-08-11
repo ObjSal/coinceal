@@ -2,7 +2,7 @@
 """Round-trip and regression tests for the envelope crypto.
 
 Run:  python3 test_envelope.py
-Requires the same deps as embed_tool.py (pillow cryptography ecdsa piexif).
+Requires the same deps as coinceal.py (pillow cryptography ecdsa piexif).
 
 Covers:
   * PBKDF2 iteration count is 600k
@@ -15,7 +15,7 @@ Covers:
 import sys
 from pathlib import Path
 
-import embed_tool as e
+import coinceal as e
 
 HERE = Path(__file__).resolve().parent
 passed = failed = 0
