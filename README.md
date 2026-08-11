@@ -71,6 +71,17 @@ Browser embedding writes **PNG** metadata only. For JPEG / GIF / TIFF / WebP / H
 - Additional authenticated data = the Bitcoin address
 - Stored as base64(salt ‖ nonce ‖ ciphertext+tag)
 
+## Key generation (identical in Python & browser)
+
+- Random keys are drawn from a CSPRNG (`os.urandom` / `crypto.getRandomValues`)
+  using **rejection sampling**: 32 bytes are drawn and redrawn until the value
+  lands strictly in `[1, n-1]` (the valid secp256k1 scalar range). This gives a
+  uniform, zero-bias key — no `mod n` reduction.
+- Optional extra entropy is mixed in as `SHA-256(random ‖ extra)`.
+- A deterministic `--seed` (hex) is `SHA-256`'d and reduced `mod n` — this is the
+  only place reduction is used, since a fixed input cannot be resampled. The same
+  seed produces the same key in the CLI and the web app.
+
 ## Envelope JSON (stored in the metadata field)
 
 ```json
