@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-**Coinceal** — a tool for embedding encrypted Bitcoin private-key "envelopes" into official image metadata fields, with two independent implementations of the same crypto. The brand name is used everywhere: CLI filename (`coinceal.py`), page titles, README, EXIF ImageDescription label, download filename (`coinceal.png`), and the PNG tEXt key `coinceal` (`META_KEY` — part of the data format; renaming it orphans previously embedded images). Only the repo directory keeps the historical `btc_envelope` name.
+**Coinceal** — a tool for embedding encrypted Bitcoin private-key "envelopes" into official image metadata fields, with two independent implementations of the same crypto. The brand name is used everywhere: CLI filename (`coinceal.py`), page titles, README, EXIF ImageDescription label, download filename (`coinceal.png`), and the PNG tEXt key `coinceal` (`META_KEY` — part of the data format; renaming it orphans previously embedded images). The project was historically named `btc_envelope`; nothing uses that name anymore.
 
 - `coinceal.py` — Python CLI: generate P2WPKH keys, encrypt, embed/extract across PNG/JPEG/GIF/TIFF/WebP/HEIF.
 - `embed.html` — standalone browser app: generate keys and embed into PNG, JPEG, or GIF.
