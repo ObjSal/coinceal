@@ -158,3 +158,17 @@ The current design prioritises a fully browser-based unlock with no external too
 `index.html` is completely self-contained (no external scripts).  
 You can embed the whole file via Google Sites “Embed code” or host it on any static file host.
 Only the optional balance lookup calls `https://mempool.space` (or the testnet equivalent).
+
+## Support
+
+If this tool is useful to you, a small bitcoin donation is always appreciated — entirely optional.
+
+<div align="center">
+
+<img src="donate-qr.png" alt="Donate bitcoin" width="200">
+
+**`bc1qrfagrsfrm8erdsmrku3fgq5yc573zyp2q3uje8`**
+
+</div>
+
+Donations help cover development costs and keep more open-source bitcoin tools coming. No VC funding, no ads, no tracking.
