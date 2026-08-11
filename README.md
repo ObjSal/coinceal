@@ -159,11 +159,11 @@ The current design prioritises a fully browser-based unlock with no external too
 
 This software is provided **"as is", without warranty of any kind**, express or implied. You use it entirely at your own risk. The author is **not liable for any lost, stolen, or unrecoverable funds** or any other damages arising from the use of this tool — including (but not limited to) forgotten passwords, deleted or re-encoded images, stripped metadata, software bugs, or compromised devices. Always test the full embed → recover cycle with a trivial amount before trusting it with anything of value, keep independent backups of your keys, and remember: an image is not a wallet.
 
-## Google Sites / static hosting
+## Hosting
 
-`index.html` is completely self-contained (no external scripts).  
-You can embed the whole file via Google Sites “Embed code” or host it on any static file host.
-Only the optional balance lookup calls `https://mempool.space` (or the testnet equivalent).
+The live apps are served with GitHub Pages at **https://objsal.github.io/coinceal/** ([Generate & Embed](https://objsal.github.io/coinceal/embed.html) · [Recover](https://objsal.github.io/coinceal/index.html), plus `testnet/` and `regtest/` variants).
+
+Both pages are single self-contained HTML files with no external scripts, so they also work anywhere else: any static file host, a Google Sites "Embed code" block, or simply saved locally and opened from disk — ideal for offline / air-gapped use. The only network calls are the optional balance/price lookups to `https://mempool.space` (or its testnet path).
 
 ## Support
 
