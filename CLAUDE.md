@@ -45,6 +45,13 @@ The iteration count is a fixed constant on both sides — there is no per-envelo
 
 Any change to iterations, salt/nonce sizes, AAD, blob layout, or envelope schema must be made in `embed_tool.py`, `embed.html`, `index.html`, **and** all copies in `testnet/` and `regtest/`, then cross-verified: a Python-made envelope must decrypt in the browser and vice-versa. `test_envelope.py` covers the Python round-trip.
 
+### Private-key scalar selection (must match between CLI and browser)
+
+Both `embed_tool.py` and `embed.html` pick the secp256k1 scalar the same way, and this must stay in sync (an identical seed must yield an identical address on both):
+
+- **Random keys** use **rejection sampling** — redraw 32 CSPRNG bytes until the value is strictly in `[1, n-1]`. This has zero modulo bias; do not "fix up" an out-of-range draw by reducing mod `n`.
+- **Deterministic seeds** (`--seed` / seed field) are `SHA-256(seed)` then reduced **mod n** (with `0 → 1`). Reduction is acceptable *only* here because a fixed input can't be resampled.
+
 ## Untrusted input: escape envelope fields in the recovery UI
 
 `index.html` parses envelope JSON out of an **attacker-supplied image** and renders `addr`/`wif` into the DOM. These must be escaped (`escapeHtml()` for text, `encodeURIComponent()` for URLs) — never interpolated raw into `innerHTML` — or a crafted image is a stored-XSS vector on a page that handles private keys. `embed.html` renders only locally generated values and is not exposed to this.

@@ -192,16 +192,26 @@ def generate_keypair(
     if network not in ("mainnet", "testnet", "regtest"):
         raise ValueError("network must be mainnet, testnet or regtest")
 
+    n = SECP256k1.order
     if seed_hex is not None:
-        priv_bytes = _normalize_seed_hex(seed_hex)
+        # Deterministic seed: reduce into [1, n-1] with mod n. Rejection sampling
+        # is impossible for a fixed input, so this is the one place we reduce.
+        d = int.from_bytes(_normalize_seed_hex(seed_hex), "big") % n
+        if d == 0:
+            d = 1
+        priv_bytes = d.to_bytes(32, "big")
     else:
-        base = os.urandom(32)
-        if extra_entropy is not None:
-            if isinstance(extra_entropy, str):
-                extra_entropy = extra_entropy.encode("utf-8")
-            priv_bytes = hashlib.sha256(base + extra_entropy).digest()
-        else:
-            priv_bytes = base
+        # Random: rejection sampling. Redraw until the value is strictly in
+        # [1, n-1]; this introduces zero modulo bias (unlike reducing mod n).
+        if isinstance(extra_entropy, str):
+            extra_entropy = extra_entropy.encode("utf-8")
+        while True:
+            base = os.urandom(32)
+            cand = hashlib.sha256(base + extra_entropy).digest() if extra_entropy is not None else base
+            d = int.from_bytes(cand, "big")
+            if 1 <= d < n:
+                priv_bytes = cand
+                break
 
     sk = SigningKey.from_string(priv_bytes, curve=SECP256k1)
     priv = sk.to_string()

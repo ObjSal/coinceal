@@ -488,30 +488,36 @@
 
   // ---------- Key generation ----------
   async function generateKeypair(network, extraEntropy, seedHex) {
-    let privBytes;
+    const n = SECP.n;
+    const toBig = (bytes) => { let d = 0n; for (const b of bytes) d = (d << 8n) + BigInt(b); return d; };
+    let d;
     if (seedHex && seedHex.trim()) {
       const cleaned = seedHex.trim().toLowerCase().replace(/^0x/, "").replace(/\s/g, "");
       if (!/^[0-9a-f]+$/.test(cleaned)) throw new Error("Seed must be hex");
       const raw = hexToBytes(cleaned.length % 2 ? "0" + cleaned : cleaned);
-      privBytes = await sha256(raw);
+      // Deterministic seed: reduce into [1, n-1] with mod n. Rejection sampling
+      // is impossible for a fixed input, so this is the one place we reduce.
+      d = toBig(await sha256(raw)) % n;
+      if (d === 0n) d = 1n;
     } else {
-      const base = crypto.getRandomValues(new Uint8Array(32));
-      if (extraEntropy && extraEntropy.length) {
-        const extra = new TextEncoder().encode(extraEntropy);
-        const combined = new Uint8Array(base.length + extra.length);
-        combined.set(base);
-        combined.set(extra, base.length);
-        privBytes = await sha256(combined);
-      } else {
-        privBytes = base;
+      // Random: rejection sampling. Redraw until the value is strictly in
+      // [1, n-1]; this introduces zero modulo bias (unlike reducing mod n).
+      const extra = (extraEntropy && extraEntropy.length) ? new TextEncoder().encode(extraEntropy) : null;
+      for (;;) {
+        const base = crypto.getRandomValues(new Uint8Array(32));
+        let cand;
+        if (extra) {
+          const combined = new Uint8Array(base.length + extra.length);
+          combined.set(base);
+          combined.set(extra, base.length);
+          cand = await sha256(combined);
+        } else {
+          cand = base;
+        }
+        d = toBig(cand);
+        if (d >= 1n && d < n) break;
       }
     }
-
-    // Ensure in range 1..n-1
-    let d = 0n;
-    for (const b of privBytes) d = (d << 8n) + BigInt(b);
-    d = SECP.mod(d, SECP.n);
-    if (d === 0n) d = 1n;
     const privFixed = new Uint8Array(32);
     let tmp = d;
     for (let i = 31; i >= 0; i--) {
