@@ -155,6 +155,10 @@ The current design prioritises a fully browser-based unlock with no external too
 - The private key never leaves your browser / machine.
 - This is a convenience tool for physical / offline gift scenarios, not a replacement for proper cold storage.
 
+## Disclaimer
+
+This software is provided **"as is", without warranty of any kind**, express or implied. You use it entirely at your own risk. The author is **not liable for any lost, stolen, or unrecoverable funds** or any other damages arising from the use of this tool — including (but not limited to) forgotten passwords, deleted or re-encoded images, stripped metadata, software bugs, or compromised devices. Always test the full embed → recover cycle with a trivial amount before trusting it with anything of value, keep independent backups of your keys, and remember: an image is not a wallet.
+
 ## Google Sites / static hosting
 
 `index.html` is completely self-contained (no external scripts).  
