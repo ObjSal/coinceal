@@ -695,7 +695,7 @@
         display.push(kp);
         if (embed) {
           const enc = await encryptPriv(password, kp.wif, kp.addr);
-          envelopes.push({ addr: kp.addr, enc, ver: 2, iters: PBKDF2_ITERS });
+          envelopes.push({ addr: kp.addr, enc, ver: 1 });
         }
       }
 

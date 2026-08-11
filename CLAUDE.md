@@ -36,14 +36,14 @@ The web apps run by opening the HTML file directly in a browser — no server. N
 
 The encryption scheme is implemented **twice** (Python `cryptography` lib and browser Web Crypto API) and must stay byte-compatible, or images embedded by one tool become unrecoverable by the other:
 
-- Password → PBKDF2-HMAC-SHA256, **600,000 iterations** (recorded per-envelope as `iters`), 16-byte salt → 32-byte AES key
+- Password → PBKDF2-HMAC-SHA256, **600,000 iterations** (hardcoded `PBKDF2_ITERS`), 16-byte salt → 32-byte AES key
 - AES-256-GCM, 12-byte nonce, **AAD = the Bitcoin address string** (binds ciphertext to its address)
 - Stored blob: `base64(salt ‖ nonce ‖ ciphertext+tag)`
-- Envelope JSON (a top-level array): `[{"addr": "bc1q…", "enc": "base64…", "ver": 2, "iters": 600000}]`
+- Envelope JSON (a top-level array): `[{"addr": "bc1q…", "enc": "base64…", "ver": 1}]`
 
-**Iteration count is data, not a hardcoded reader constant.** Encryption uses the current default (600k) and writes it into each envelope. Decryption reads `iters` from the envelope and falls back to **310,000** for legacy `ver: 1` envelopes that predate the field (this is why the bundled `test_*` images, which are `ver: 1`, still decrypt). To raise the default again, change `PBKDF2_ITERS` on the write side only; never hardcode it on the read side.
+The iteration count is a fixed constant on both sides — there is no per-envelope `iters` field and no backward-compat fallback. Changing `PBKDF2_ITERS` makes previously-created images undecryptable, so any change to it means regenerating the bundled `test_*` images (`python3 embed_tool.py embed -i <img> -o <img> -p testpass123 -n 1`). The `ver` field is reserved for future schema changes but is currently always `1`.
 
-Any change to salt/nonce sizes, AAD, blob layout, or envelope schema must be made in `embed_tool.py`, `embed.html`, `index.html`, **and** all copies in `testnet/` and `regtest/`, then cross-verified: a Python-made envelope must decrypt in the browser and vice-versa. `test_envelope.py` covers the Python side; the browser side must be checked against the same crypto (Web Crypto `deriveKey` with the envelope's `iters`).
+Any change to iterations, salt/nonce sizes, AAD, blob layout, or envelope schema must be made in `embed_tool.py`, `embed.html`, `index.html`, **and** all copies in `testnet/` and `regtest/`, then cross-verified: a Python-made envelope must decrypt in the browser and vice-versa. `test_envelope.py` covers the Python round-trip.
 
 ## Untrusted input: escape envelope fields in the recovery UI
 

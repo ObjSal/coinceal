@@ -352,7 +352,7 @@
   "use strict";
 
   const META_KEY = "btc-envelopes";
-  const LEGACY_PBKDF2_ITERS = 310000; // ver:1 envelopes used a fixed count; ver:2+ carry their own `iters`
+  const PBKDF2_ITERS = 600000;
 
   // Envelope fields come from an untrusted, attacker-supplied image, so escape
   // any value before inserting it into innerHTML.
@@ -716,7 +716,7 @@
   }
 
   // ---------- Decrypt (Web Crypto) ----------
-  async function decryptWif(password, encB64, addr, iters) {
+  async function decryptWif(password, encB64, addr) {
     const raw = Uint8Array.from(atob(encB64), c => c.charCodeAt(0));
     if (raw.length < 16 + 12 + 16) throw new Error("Ciphertext too short");
 
@@ -736,7 +736,7 @@
       {
         name: "PBKDF2",
         salt: salt,
-        iterations: iters,
+        iterations: PBKDF2_ITERS,
         hash: "SHA-256"
       },
       encKey,
@@ -843,7 +843,7 @@
           }
           resultEl.innerHTML = `<p class="hint"><span class="spinner"></span> Decrypting…</p>`;
           try {
-            const wif = await decryptWif(pw, env.enc, addr, env.iters || LEGACY_PBKDF2_ITERS);
+            const wif = await decryptWif(pw, env.enc, addr);
             resultEl.innerHTML = `
               <div class="wif-box">
                 <div class="label">Private key (WIF) — keep secret</div>
