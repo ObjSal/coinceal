@@ -179,13 +179,25 @@
 
     <!-- Carrier image -->
     <div class="card">
-      <h2>Carrier image (PNG recommended)</h2>
+      <h2>Carrier image (PNG, JPEG, or GIF)</h2>
       <div class="drop" id="dropzone">
-        <strong>Drop PNG here or click to choose</strong>
-        <p>PNG works best. Other formats: use the Python tool.</p>
-        <input type="file" id="fileInput" accept="image/png,.png" />
+        <strong>Drop PNG, JPEG, or GIF here or click to choose</strong>
+        <p>Pixels are never re-encoded — animations and existing metadata (EXIF, GPS, orientation) survive. TIFF/WebP/HEIF: use the Python tool.</p>
+        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/gif,.png,.jpg,.jpeg,.gif" />
       </div>
       <p class="hint" id="fileName" style="margin-top:0.75rem">No file selected — a blank PNG will be created.</p>
+      <div id="jpegOptions" style="display:none; margin-top:0.5rem">
+        <label style="display:flex; align-items:center; gap:0.5rem; color:var(--text); font-size:0.85rem; cursor:pointer">
+          <input type="checkbox" id="convertPng" checked style="width:auto; margin:0" />
+          Convert JPEG → PNG (recommended)
+        </label>
+        <p class="hint" style="margin:0.25rem 0 0.6rem 1.5rem">More concealed and more durable: the envelope moves to a custom PNG text field that photo apps don't display and EXIF-scrubbing tools don't touch. Pixels are copied 1:1 (same resolution); photo metadata is stripped unless kept below. The file gets larger.</p>
+        <label style="display:flex; align-items:center; gap:0.5rem; color:var(--text); font-size:0.85rem; cursor:pointer; margin-left:1.5rem">
+          <input type="checkbox" id="keepExif" style="width:auto; margin:0" />
+          Keep photo metadata (EXIF)
+        </label>
+        <p class="hint" style="margin:0.25rem 0 0 3rem">Copies the EXIF (GPS, camera info) into the PNG — less private. Thumbnail is dropped (PNG has no use for it); orientation is normalized into the pixels.</p>
+      </div>
     </div>
 
     <!-- Actions -->
@@ -211,7 +223,7 @@
     <footer>
       <p>All cryptography runs locally in your browser. Nothing is uploaded.<br>
          Compatible with <code>coinceal.py</code> and the <a href="index.html">Recover</a> page.<br>
-         Encryption: PBKDF2-HMAC-SHA256 (310k) + AES-256-GCM</p>
+         Encryption: PBKDF2-HMAC-SHA256 (600k) + AES-256-GCM</p>
     </footer>
   </div>
 
@@ -233,13 +245,18 @@
   const dropzone = $("dropzone");
   const fileInput = $("fileInput");
   const fileNameEl = $("fileName");
+  const jpegOptionsEl = $("jpegOptions");
+  const convertPngEl = $("convertPng");
+  const keepExifEl = $("keepExif");
   const statusEl = $("status");
   const keyListEl = $("keyList");
   const resultsCard = $("resultsCard");
   const btnDownload = $("btnDownload");
 
-  let carrierBuffer = null; // ArrayBuffer of uploaded PNG
-  let lastPngBytes = null;  // result for download
+  let carrierBuffer = null; // ArrayBuffer of uploaded carrier image (PNG/JPEG/GIF)
+  let lastBytes = null;     // result bytes for download
+  let lastMime = "image/png";
+  let lastName = "coinceal.png";
 
   function setStatus(msg, type) {
     statusEl.textContent = msg;
@@ -589,6 +606,20 @@
     return (c ^ 0xffffffff) >>> 0;
   }
 
+  function makePngChunk(type, data) {
+    const typeB = new TextEncoder().encode(type);
+    const chunk = new Uint8Array(4 + 4 + data.length + 4);
+    const dv = new DataView(chunk.buffer);
+    dv.setUint32(0, data.length);
+    chunk.set(typeB, 4);
+    chunk.set(data, 8);
+    const crcBuf = new Uint8Array(4 + data.length);
+    crcBuf.set(typeB, 0);
+    crcBuf.set(data, 4);
+    dv.setUint32(8 + data.length, crc32(crcBuf));
+    return chunk;
+  }
+
   function makeTextChunk(key, value) {
     const keyB = new TextEncoder().encode(key);
     const valB = new TextEncoder().encode(value);
@@ -596,26 +627,15 @@
     data.set(keyB, 0);
     data[keyB.length] = 0;
     data.set(valB, keyB.length + 1);
-    const type = new TextEncoder().encode("tEXt");
-    const len = data.length;
-    const chunk = new Uint8Array(4 + 4 + len + 4);
-    const dv = new DataView(chunk.buffer);
-    dv.setUint32(0, len);
-    chunk.set(type, 4);
-    chunk.set(data, 8);
-    const crcBuf = new Uint8Array(4 + len);
-    crcBuf.set(type, 0);
-    crcBuf.set(data, 4);
-    dv.setUint32(8 + len, crc32(crcBuf));
-    return chunk;
+    return makePngChunk("tEXt", data);
   }
 
   function injectPngText(pngBuffer, key, value) {
     const u8 = new Uint8Array(pngBuffer);
     if (u8[0] !== 0x89 || u8[1] !== 0x50) throw new Error("Not a PNG file");
-    // Find IEND
+    // Find IEND (type bytes sit 8 from the end of a clean file; scan allows trailing junk)
     let iend = -1;
-    for (let i = 8; i < u8.length - 11; i++) {
+    for (let i = 8; i + 8 <= u8.length; i++) {
       if (u8[i] === 0x49 && u8[i+1] === 0x45 && u8[i+2] === 0x4E && u8[i+3] === 0x44) {
         iend = i - 4; // start of length field of IEND
         break;
@@ -657,6 +677,364 @@
     for (const c of chunks) { out.set(c, pos); pos += c.length; }
     out.set(textChunk, pos); pos += textChunk.length;
     out.set(iendChunk, pos);
+    return out;
+  }
+
+  // ---------- JPEG EXIF writer ----------
+  // Existing EXIF is preserved: the TIFF structure (IFD0, Exif, GPS, Interop
+  // and the thumbnail IFD) is parsed into entries and re-serialized with
+  // recomputed offsets. Entry value bytes are copied verbatim in the source
+  // byte order, so nothing is reinterpreted. Only ImageDescription and
+  // UserComment are replaced with ours. MakerNote bytes are copied as-is
+  // (absolute offsets inside them may go stale — the same tradeoff piexif
+  // makes on the Python side). If the existing EXIF is unparseable, a fresh
+  // minimal block is written instead.
+  const EXIF_TYPE_SIZE = { 1:1, 2:1, 3:2, 4:4, 5:8, 6:1, 7:1, 8:2, 9:4, 10:8, 11:4, 12:8 };
+
+  function parseExifTiff(u8) {
+    const le = u8[0] === 0x49 && u8[1] === 0x49;
+    if (!le && !(u8[0] === 0x4D && u8[1] === 0x4D)) throw new Error("bad TIFF byte order");
+    const get16 = (p) => {
+      if (p < 0 || p + 2 > u8.length) throw new Error("EXIF offset out of bounds");
+      return le ? u8[p] | (u8[p+1] << 8) : (u8[p] << 8) | u8[p+1];
+    };
+    const get32 = (p) => {
+      if (p < 0 || p + 4 > u8.length) throw new Error("EXIF offset out of bounds");
+      return le ? (u8[p] | (u8[p+1] << 8) | (u8[p+2] << 16) | (u8[p+3] << 24)) >>> 0
+                : ((u8[p] << 24) | (u8[p+1] << 16) | (u8[p+2] << 8) | u8[p+3]) >>> 0;
+    };
+    if (get16(2) !== 42) throw new Error("bad TIFF magic");
+    const numOf = (v) => { // pointer/length entry value → number
+      let n = 0;
+      if (le) { for (let i = v.length - 1; i >= 0; i--) n = n * 256 + v[i]; }
+      else { for (let i = 0; i < v.length; i++) n = n * 256 + v[i]; }
+      return n >>> 0;
+    };
+
+    const readIfd = (offset) => {
+      const n = get16(offset);
+      const entries = [];
+      for (let i = 0; i < n; i++) {
+        const e = offset + 2 + i * 12;
+        const tag = get16(e), type = get16(e + 2), count = get32(e + 4);
+        const size = EXIF_TYPE_SIZE[type];
+        if (!size) continue; // nonstandard type — drop the entry
+        const byteLen = size * count;
+        const src = byteLen > 4 ? get32(e + 8) : e + 8;
+        if (src + byteLen > u8.length) throw new Error("EXIF value out of bounds");
+        entries.push({ tag, type, count, value: u8.slice(src, src + byteLen) });
+      }
+      return { entries, next: get32(offset + 2 + n * 12) };
+    };
+    const take = (entries, tag) => {
+      const i = entries.findIndex((e) => e.tag === tag);
+      return i < 0 ? null : entries.splice(i, 1)[0];
+    };
+    const readSubIfd = (entries, tag) => { // a corrupt sub-IFD shouldn't nuke the rest
+      const ptr = take(entries, tag);
+      if (!ptr) return [];
+      try { return readIfd(numOf(ptr.value)).entries; }
+      catch (e) { return []; }
+    };
+
+    const ifd0r = readIfd(get32(4));
+    const ifd0 = ifd0r.entries;
+    const exif = readSubIfd(ifd0, 0x8769);
+    const gps = readSubIfd(ifd0, 0x8825);
+    const interop = readSubIfd(exif, 0xA005);
+    let first = [], thumb = null;
+    if (ifd0r.next) { // 1st IFD: embedded thumbnail
+      try {
+        first = readIfd(ifd0r.next).entries;
+        const tOff = take(first, 0x0201), tLen = take(first, 0x0202);
+        if (tOff && tLen) {
+          const o = numOf(tOff.value), l = numOf(tLen.value);
+          if (l > 0 && o + l <= u8.length) thumb = u8.slice(o, o + l);
+        }
+      } catch (e) { first = []; }
+      if (!thumb) first = []; // a 1st IFD without a valid thumbnail is useless
+    }
+    return { le, ifd0, exif, gps, interop, first, thumb };
+  }
+
+  function serializeExifTiff(p) {
+    const le = p.le;
+    const u32b = (n) => {
+      const v = new Uint8Array(4);
+      if (le) { v[0] = n & 255; v[1] = (n >>> 8) & 255; v[2] = (n >>> 16) & 255; v[3] = (n >>> 24) & 255; }
+      else { v[3] = n & 255; v[2] = (n >>> 8) & 255; v[1] = (n >>> 16) & 255; v[0] = (n >>> 24) & 255; }
+      return v;
+    };
+    const ifd0 = p.ifd0.slice(), exif = p.exif.slice(), gps = p.gps.slice(),
+          interop = p.interop.slice(), first = p.thumb ? p.first.slice() : [];
+    const thumb = p.thumb;
+
+    const mkPtr = (tag) => ({ tag, type: 4, count: 1, value: new Uint8Array(4) });
+    let ptrExif = null, ptrGps = null, ptrInterop = null, thumbOffE = null;
+    if (exif.length) { ptrExif = mkPtr(0x8769); ifd0.push(ptrExif); }
+    if (gps.length) { ptrGps = mkPtr(0x8825); ifd0.push(ptrGps); }
+    if (interop.length) { ptrInterop = mkPtr(0xA005); exif.push(ptrInterop); }
+    if (thumb) {
+      thumbOffE = mkPtr(0x0201); // JPEGInterchangeFormat
+      first.push(thumbOffE, { tag: 0x0202, type: 4, count: 1, value: u32b(thumb.length) });
+    }
+    for (const ifd of [ifd0, exif, gps, interop, first]) ifd.sort((a, b) => a.tag - b.tag);
+
+    const sz = (entries) => entries.length
+      ? 2 + entries.length * 12 + 4 + entries.reduce((s, e) => s + (e.value.length > 4 ? e.value.length : 0), 0)
+      : 0;
+    const offIfd0 = 8;
+    const offExif = offIfd0 + sz(ifd0);
+    const offInterop = offExif + sz(exif);
+    const offGps = offInterop + sz(interop);
+    const offFirst = offGps + sz(gps);
+    const offThumb = offFirst + sz(first);
+    if (ptrExif) ptrExif.value = u32b(offExif);
+    if (ptrGps) ptrGps.value = u32b(offGps);
+    if (ptrInterop) ptrInterop.value = u32b(offInterop);
+    if (thumbOffE) thumbOffE.value = u32b(offThumb);
+
+    const out = new Uint8Array(offThumb + (thumb ? thumb.length : 0));
+    const put16 = (o, n) => { if (le) { out[o] = n & 255; out[o+1] = n >>> 8; } else { out[o] = n >>> 8; out[o+1] = n & 255; } };
+    const put32 = (o, n) => out.set(u32b(n), o);
+    out[0] = out[1] = le ? 0x49 : 0x4D;
+    put16(2, 42);
+    put32(4, offIfd0);
+    const writeIfd = (offset, entries, next) => {
+      put16(offset, entries.length);
+      let e = offset + 2;
+      let data = offset + 2 + entries.length * 12 + 4;
+      for (const en of entries) {
+        put16(e, en.tag); put16(e + 2, en.type); put32(e + 4, en.count);
+        if (en.value.length > 4) { put32(e + 8, data); out.set(en.value, data); data += en.value.length; }
+        else out.set(en.value, e + 8); // short values inline, rest stays zero
+        e += 12;
+      }
+      put32(e, next);
+    };
+    writeIfd(offIfd0, ifd0, thumb ? offFirst : 0);
+    if (exif.length) writeIfd(offExif, exif, 0);
+    if (interop.length) writeIfd(offInterop, interop, 0);
+    if (gps.length) writeIfd(offGps, gps, 0);
+    if (thumb) { writeIfd(offFirst, first, 0); out.set(thumb, offThumb); }
+    return out;
+  }
+
+  function buildExifApp1(jsonStr, existingTiff) {
+    let p = null;
+    if (existingTiff) {
+      try { p = parseExifTiff(existingTiff); } catch (e) { p = null; }
+    }
+    if (!p) p = { le: true, ifd0: [], exif: [], gps: [], interop: [], first: [], thumb: null };
+
+    // UserComment: "UNICODE\0" + UTF-16LE — byte-identical to piexif's output
+    const uc = new Uint8Array(8 + jsonStr.length * 2);
+    uc.set([0x55,0x4E,0x49,0x43,0x4F,0x44,0x45,0x00]);
+    for (let i = 0; i < jsonStr.length; i++) {
+      const c = jsonStr.charCodeAt(i);
+      uc[8 + i*2] = c & 0xff;
+      uc[9 + i*2] = c >> 8;
+    }
+    const descBytes = new TextEncoder().encode("Coinceal\0"); // ASCII incl. NUL
+    const replace = (entries, entry) => {
+      const i = entries.findIndex((x) => x.tag === entry.tag);
+      if (i >= 0) entries.splice(i, 1);
+      entries.push(entry);
+    };
+    replace(p.ifd0, { tag: 0x010E, type: 2, count: descBytes.length, value: descBytes });
+    replace(p.exif, { tag: 0x9286, type: 7, count: uc.length, value: uc });
+
+    let tiff = serializeExifTiff(p);
+    if (2 + 6 + tiff.length > 0xFFFF && p.thumb) {
+      // Segment too big — sacrifice the embedded thumbnail before giving up
+      tiff = serializeExifTiff({ ...p, thumb: null, first: [] });
+    }
+    const segLen = 2 + 6 + tiff.length; // length field + "Exif\0\0" + TIFF
+    if (segLen > 0xFFFF) throw new Error("Envelope too large for a JPEG EXIF segment — use fewer keys or PNG");
+    const app1 = new Uint8Array(2 + segLen);
+    app1[0] = 0xFF; app1[1] = 0xE1;
+    app1[2] = segLen >> 8; app1[3] = segLen & 0xff;
+    app1.set([0x45,0x78,0x69,0x66,0x00,0x00], 4); // "Exif\0\0"
+    app1.set(tiff, 10);
+    return app1;
+  }
+
+  function injectJpegExif(jpegBuffer, jsonStr) {
+    const u8 = new Uint8Array(jpegBuffer);
+    if (u8[0] !== 0xFF || u8[1] !== 0xD8) throw new Error("Not a JPEG file");
+    // Walk pre-SOS segments; pull out the existing APP1-Exif (XMP, ICC etc. kept)
+    const pieces = [];
+    let existingTiff = null;
+    let offset = 2;
+    for (;;) {
+      if (offset + 4 > u8.length) throw new Error("Truncated JPEG");
+      if (u8[offset] !== 0xFF) throw new Error("Corrupt JPEG segment stream");
+      const marker = u8[offset + 1];
+      if (marker === 0xDA) break; // SOS — everything from here is copied verbatim
+      const segLen = (u8[offset + 2] << 8) | u8[offset + 3];
+      if (segLen < 2 || offset + 2 + segLen > u8.length) throw new Error("Corrupt JPEG segment length");
+      const isExif = marker === 0xE1 &&
+        u8[offset+4] === 0x45 && u8[offset+5] === 0x78 && u8[offset+6] === 0x69 &&
+        u8[offset+7] === 0x66 && u8[offset+8] === 0 && u8[offset+9] === 0;
+      if (isExif) {
+        if (!existingTiff) existingTiff = u8.slice(offset + 10, offset + 2 + segLen);
+      } else {
+        pieces.push(u8.subarray(offset, offset + 2 + segLen));
+      }
+      offset += 2 + segLen;
+    }
+    const tail = u8.subarray(offset); // SOS → EOI, untouched (lossless)
+    // Insert new APP1 after any leading APP0 (JFIF) segments
+    let idx = 0;
+    while (idx < pieces.length && pieces[idx][1] === 0xE0) idx++;
+    pieces.splice(idx, 0, buildExifApp1(jsonStr, existingTiff));
+
+    let total = 2 + tail.length;
+    for (const s of pieces) total += s.length;
+    const out = new Uint8Array(total);
+    out[0] = 0xFF; out[1] = 0xD8;
+    let pos = 2;
+    for (const s of pieces) { out.set(s, pos); pos += s.length; }
+    out.set(tail, pos);
+    return out;
+  }
+
+  // ---------- GIF Comment Extension writer ----------
+  // Walks the full block grammar and copies every frame byte-for-byte, so
+  // animations (frame data, delays, NETSCAPE loop extension) are untouched.
+  // Existing comment extensions are dropped, ours is inserted right after the
+  // global color table — the same spot Pillow uses, and first so the readers
+  // (which return the first comment) always see ours.
+  function injectGifComment(gifBuffer, text) {
+    const u8 = new Uint8Array(gifBuffer);
+    if (u8.length < 13 || u8[0] !== 0x47 || u8[1] !== 0x49 || u8[2] !== 0x46 || u8[3] !== 0x38) {
+      throw new Error("Not a GIF file");
+    }
+    let headerEnd = 13; // signature(6) + logical screen descriptor(7)
+    if (u8[10] & 0x80) headerEnd += 3 * (1 << ((u8[10] & 0x07) + 1)); // global color table
+    if (headerEnd > u8.length) throw new Error("Truncated GIF header");
+
+    const skipSubBlocks = (o) => {
+      while (o < u8.length) {
+        const sub = u8[o++];
+        if (sub === 0) return o;
+        o += sub;
+      }
+      throw new Error("Truncated GIF sub-blocks");
+    };
+
+    const pieces = [];
+    let offset = headerEnd;
+    while (offset < u8.length) {
+      const b = u8[offset];
+      if (b === 0x3B) break; // trailer
+      if (b === 0x21) { // extension: label + sub-blocks
+        if (offset + 2 > u8.length) throw new Error("Truncated GIF extension");
+        const label = u8[offset + 1];
+        const end = skipSubBlocks(offset + 2);
+        if (label !== 0xFE) pieces.push(u8.subarray(offset, end)); // drop old comments
+        offset = end;
+      } else if (b === 0x2C) { // image descriptor + optional LCT + LZW data
+        let o = offset + 10;
+        if (o > u8.length) throw new Error("Truncated GIF image descriptor");
+        const ipacked = u8[offset + 9];
+        if (ipacked & 0x80) o += 3 * (1 << ((ipacked & 0x07) + 1));
+        o++; // LZW minimum code size
+        const end = skipSubBlocks(o);
+        pieces.push(u8.subarray(offset, end));
+        offset = end;
+      } else {
+        throw new Error("Unknown GIF block 0x" + b.toString(16));
+      }
+    }
+
+    // Comment extension: 0x21 0xFE + 255-byte sub-blocks + terminator
+    const data = new TextEncoder().encode(text);
+    const nBlocks = Math.ceil(data.length / 255);
+    const comment = new Uint8Array(2 + data.length + nBlocks + 1);
+    comment[0] = 0x21; comment[1] = 0xFE;
+    let cp = 2;
+    for (let i = 0; i < data.length; i += 255) {
+      const chunk = data.subarray(i, i + 255);
+      comment[cp++] = chunk.length;
+      comment.set(chunk, cp);
+      cp += chunk.length;
+    }
+    comment[cp] = 0;
+
+    const head = u8.slice(0, headerEnd);
+    head[3] = 0x38; head[4] = 0x39; head[5] = 0x61; // extensions require GIF89a
+
+    let total = head.length + comment.length + 1;
+    for (const s of pieces) total += s.length;
+    const out = new Uint8Array(total);
+    out.set(head, 0);
+    let pos = head.length;
+    out.set(comment, pos); pos += comment.length;
+    for (const s of pieces) { out.set(s, pos); pos += s.length; }
+    out[pos] = 0x3B;
+    return out;
+  }
+
+  // ---------- JPEG → PNG conversion ----------
+  // Decode via canvas (pixel-lossless: PNG keeps exactly the decoded pixels,
+  // at the same resolution; the browser applies EXIF orientation while
+  // decoding, so rotated photos come out upright).
+  async function jpegToPng(buffer) {
+    const bmp = await createImageBitmap(new Blob([buffer], { type: "image/jpeg" }));
+    const w = bmp.width, h = bmp.height;
+    if (w > 16384 || h > 16384) {
+      bmp.close();
+      throw new Error("Image too large to convert in this browser — uncheck Convert to embed as JPEG");
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(bmp, 0, 0);
+    bmp.close();
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("PNG conversion failed — uncheck Convert to embed as JPEG");
+    return await blob.arrayBuffer();
+  }
+
+  function extractJpegExifTiff(u8) {
+    // First APP1-Exif segment's TIFF block, or null
+    let offset = 2;
+    while (offset + 4 <= u8.length) {
+      if (u8[offset] !== 0xFF) return null;
+      const marker = u8[offset + 1];
+      if (marker === 0xDA) return null; // SOS
+      const segLen = (u8[offset + 2] << 8) | u8[offset + 3];
+      if (segLen < 2 || offset + 2 + segLen > u8.length) return null;
+      if (marker === 0xE1 &&
+          u8[offset+4] === 0x45 && u8[offset+5] === 0x78 && u8[offset+6] === 0x69 &&
+          u8[offset+7] === 0x66 && u8[offset+8] === 0 && u8[offset+9] === 0) {
+        return u8.slice(offset + 10, offset + 2 + segLen);
+      }
+      offset += 2 + segLen;
+    }
+    return null;
+  }
+
+  function makePngExifChunk(tiffBytes) {
+    // PNG eXIf chunk: the raw TIFF block, re-serialized. Orientation is baked
+    // into the pixels by the canvas decode, so the tag is dropped (absent =
+    // normal); the EXIF thumbnail is dropped too — PNG viewers preview the
+    // image itself, and the stale thumbnail would show the un-rotated original.
+    let p;
+    try { p = parseExifTiff(tiffBytes); } catch (e) { return null; }
+    const oi = p.ifd0.findIndex((e) => e.tag === 0x0112);
+    if (oi >= 0) p.ifd0.splice(oi, 1);
+    p.thumb = null; p.first = [];
+    if (!p.ifd0.length && !p.exif.length && !p.gps.length) return null;
+    return makePngChunk("eXIf", serializeExifTiff(p));
+  }
+
+  function insertPngChunkBeforeIend(pngBytes, chunk) {
+    const cut = pngBytes.length - 12; // injectPngText output always ends with IEND
+    const out = new Uint8Array(pngBytes.length + chunk.length);
+    out.set(pngBytes.subarray(0, cut), 0);
+    out.set(chunk, cut);
+    out.set(pngBytes.subarray(cut), cut + chunk.length);
     return out;
   }
 
@@ -715,13 +1093,41 @@
       `).join("");
 
       if (embed) {
-        let pngBuf = carrierBuffer || makeBlankPng();
+        let buf = carrierBuffer || makeBlankPng();
+        let exifChunk = null, convertedNote = "";
+        {
+          const m = new Uint8Array(buf);
+          if (m[0] === 0xFF && m[1] === 0xD8 && convertPngEl.checked) {
+            if (keepExifEl.checked) {
+              const tiff = extractJpegExifTiff(m);
+              if (tiff) exifChunk = makePngExifChunk(tiff);
+            }
+            buf = await jpegToPng(buf);
+            convertedNote = exifChunk
+              ? " (converted from JPEG, metadata copied)"
+              : " (converted from JPEG)";
+          }
+        }
+        const magic = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
         const json = JSON.stringify(envelopes);
-        lastPngBytes = injectPngText(pngBuf, META_KEY, json);
+        let label;
+        if (magic[0] === 0x89 && magic[1] === 0x50) {
+          lastBytes = injectPngText(buf, META_KEY, json);
+          if (exifChunk) lastBytes = insertPngChunkBeforeIend(lastBytes, exifChunk);
+          lastMime = "image/png"; lastName = "coinceal.png"; label = "PNG" + convertedNote;
+        } else if (magic[0] === 0xFF && magic[1] === 0xD8) {
+          lastBytes = injectJpegExif(buf, json);
+          lastMime = "image/jpeg"; lastName = "coinceal.jpg"; label = "JPEG (existing metadata preserved)";
+        } else if (magic[0] === 0x47 && magic[1] === 0x49 && magic[2] === 0x46) {
+          lastBytes = injectGifComment(buf, json);
+          lastMime = "image/gif"; lastName = "coinceal.gif"; label = "GIF";
+        } else {
+          throw new Error("Unsupported carrier image — use PNG, JPEG, or GIF");
+        }
         btnDownload.style.display = "inline-block";
-        setStatus(`Embedded ${envelopes.length} envelope(s) into PNG. Ready to download.`, "ok");
+        setStatus(`Embedded ${envelopes.length} envelope(s) into ${label}. Ready to download.`, "ok");
       } else {
-        lastPngBytes = null;
+        lastBytes = null;
         btnDownload.style.display = "none";
         setStatus(`Generated ${display.length} key(s). Not embedded (no password encryption).`, "ok");
       }
@@ -740,18 +1146,25 @@
   $("btnClear").addEventListener("click", () => {
     keyListEl.innerHTML = "";
     resultsCard.style.display = "none";
-    lastPngBytes = null;
+    lastBytes = null;
     carrierBuffer = null;
     fileNameEl.textContent = "No file selected — a blank PNG will be created.";
     fileInput.value = "";
+    jpegOptionsEl.style.display = "none";
+    convertPngEl.checked = true;
+    keepExifEl.checked = false;
+    keepExifEl.disabled = false;
     clearStatus();
   });
+  convertPngEl.addEventListener("change", () => {
+    keepExifEl.disabled = !convertPngEl.checked;
+  });
   btnDownload.addEventListener("click", () => {
-    if (!lastPngBytes) return;
-    const blob = new Blob([lastPngBytes], { type: "image/png" });
+    if (!lastBytes) return;
+    const blob = new Blob([lastBytes], { type: lastMime });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "coinceal.png";
+    a.download = lastName;
     a.click();
     URL.revokeObjectURL(a.href);
   });
@@ -770,11 +1183,15 @@
   });
 
   async function loadFile(f) {
-    if (!f.name.toLowerCase().endsWith(".png") && f.type !== "image/png") {
-      setStatus("Please use a PNG file for browser embedding. Other formats: use coinceal.py.", "err");
+    const okName = /\.(png|jpe?g|gif)$/i.test(f.name);
+    const okType = ["image/png", "image/jpeg", "image/gif"].includes(f.type);
+    if (!okName && !okType) {
+      setStatus("Please use a PNG, JPEG, or GIF file for browser embedding. Other formats: use coinceal.py.", "err");
       return;
     }
     carrierBuffer = await f.arrayBuffer();
+    const m = new Uint8Array(carrierBuffer);
+    jpegOptionsEl.style.display = (m[0] === 0xFF && m[1] === 0xD8) ? "block" : "none";
     fileNameEl.textContent = `Selected: ${f.name} (${(f.size / 1024).toFixed(1)} KB)`;
     clearStatus();
   }

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Coinceal** — a tool for embedding encrypted Bitcoin private-key "envelopes" into official image metadata fields, with two independent implementations of the same crypto. The brand name is used everywhere: CLI filename (`coinceal.py`), page titles, README, EXIF ImageDescription label, download filename (`coinceal.png`), and the PNG tEXt key `coinceal` (`META_KEY` — part of the data format; renaming it orphans previously embedded images). Only the repo directory keeps the historical `btc_envelope` name.
 
 - `coinceal.py` — Python CLI: generate P2WPKH keys, encrypt, embed/extract across PNG/JPEG/GIF/TIFF/WebP/HEIF.
-- `embed.html` — standalone browser app: generate keys and embed into PNG only.
+- `embed.html` — standalone browser app: generate keys and embed into PNG, JPEG, or GIF.
 - `index.html` — standalone browser app: recover (parse metadata, show balances via mempool.space, decrypt WIF with password).
 
 There is no build system, package manager config, or test suite.
@@ -60,18 +60,27 @@ Both `coinceal.py` and `embed.html` pick the secp256k1 scalar the same way, and 
 
 | Format | Field | Read in browser (`index.html`) | Write in browser (`embed.html`) |
 |--------|-------|-------------------------------|--------------------------------|
-| PNG | tEXt chunk keyed `coinceal` (`META_KEY`) | ✅ | ✅ (only format) |
-| JPEG | EXIF UserComment (UNICODE marker + UTF-16LE) | ✅ | ❌ |
-| GIF | Comment Extension | ✅ | ❌ |
+| PNG | tEXt chunk keyed `coinceal` (`META_KEY`) | ✅ | ✅ |
+| JPEG | EXIF UserComment (UNICODE marker + UTF-16LE) | ✅ | ✅ |
+| GIF | Comment Extension | ✅ | ✅ |
 | TIFF | ImageDescription (tag 270) | ✅ | ❌ |
 | WebP / HEIF | EXIF UserComment | ❌ (Python CLI only) | ❌ |
 | BMP | unsupported — no standard text field | — | — |
 
-`index.html` contains hand-written binary parsers for each format (`extractPngTextChunks`, `extractJpegUserComment`, `extractGifComment`, `extractTiffImageDescription`); `embed.html` contains a PNG tEXt chunk writer with CRC and its own compact BigInt secp256k1 + bech32 implementation. These pure-JS implementations exist because of the self-containment constraint below.
+`index.html` contains hand-written binary parsers for each format (`extractPngTextChunks`, `extractJpegUserComment`, `extractGifComment`, `extractTiffImageDescription`); `embed.html` contains hand-written writers (PNG tEXt with CRC, JPEG EXIF, GIF Comment Extension) and its own compact BigInt secp256k1 + bech32 implementation. These pure-JS implementations exist because of the self-containment constraint below.
+
+Browser writer behavior (all lossless — pixel/frame data is never re-encoded):
+
+- **JPEG** (`injectJpegExif`): **preserves existing EXIF** (same policy as the CLI's piexif path). The TIFF structure — IFD0, Exif, GPS, Interop, thumbnail IFD — is parsed into entries (`parseExifTiff`) and re-serialized with recomputed offsets (`serializeExifTiff`); value bytes are copied verbatim in the **source byte order** (an `MM` file stays big-endian), so nothing is reinterpreted. Only ImageDescription and UserComment are replaced. MakerNote bytes are copied as-is — absolute offsets inside them may go stale, the same tradeoff piexif makes. If the segment would exceed the 64 KB APP1 limit, the embedded thumbnail is dropped first; unparseable EXIF falls back to a fresh minimal block. Other segments (JFIF APP0, XMP, ICC) are kept. The UserComment payload is `UNICODE\0` + UTF-16LE, byte-identical to piexif's output.
+- **GIF** (`injectGifComment`): walks the full block grammar (extensions, image descriptors, LZW sub-blocks), copies every frame byte-for-byte — animations, per-frame delays, and the NETSCAPE loop extension survive. Existing Comment Extensions are dropped and ours is inserted first (right after the global color table) so readers that return the first comment see ours; a `GIF87a` header is upgraded to `GIF89a` (extensions require it). The Python CLI re-encodes GIFs through Pillow but likewise preserves animation (`save_all` + per-frame durations + loop when `img.is_animated`).
+
+- **JPEG → PNG conversion** (`jpegToPng`, toggles shown only when a JPEG is loaded): "Convert JPEG → PNG" (default **on**, recommended — envelope moves to the tEXt chunk, which photo apps don't display and EXIF scrubbers don't touch) decodes via canvas (pixel-lossless, same resolution, browser bakes EXIF orientation into the pixels) and embeds via the PNG path. Sub-toggle "Keep photo metadata (EXIF)" (default **off**) copies the source EXIF into a PNG **`eXIf` chunk** (`makePngExifChunk`), with the Orientation tag dropped (now baked into pixels — keeping it would double-rotate) and the thumbnail dropped (PNG viewers preview the image itself). Canvas dimension guard at 16384px/side.
+
+New writers must be cross-verified like the crypto: browser-embedded image → `coinceal.py extract` and → `index.html`, plus a round trip against a real photo with existing EXIF / an animated GIF.
 
 ## Self-containment constraint
 
-Both HTML files must remain single self-contained files with **no external scripts/stylesheets** (they are hosted via Google Sites "Embed code" / static hosting). The only permitted network calls are the optional balance/price lookups to `https://mempool.space` (or its testnet path). Do not add CDN dependencies.
+Both HTML files must remain single self-contained files with **no external scripts/stylesheets**. They are hosted on GitHub Pages, which could serve same-origin scripts — but the single-file property is kept deliberately so users can save one HTML file and run it fully offline/air-gapped. The only permitted network calls are the optional balance/price lookups to `https://mempool.space` (or its testnet path). Do not add CDN dependencies.
 
 ## Network variants are drifting copies, not symlinks
 

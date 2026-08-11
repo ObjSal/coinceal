@@ -41,7 +41,7 @@ from typing import Any
 # Dependencies
 # ---------------------------------------------------------------------------
 try:
-    from PIL import Image, PngImagePlugin
+    from PIL import Image, ImageSequence, PngImagePlugin
 except ImportError:
     print("Pillow required:  pip install pillow", file=sys.stderr)
     sys.exit(1)
@@ -483,9 +483,20 @@ def write_envelopes(src: Path, dst: Path, envelopes: list[dict]) -> None:
 
     elif fmt == "GIF":
         # GIF Comment Extension – official place for arbitrary text
-        if img.mode not in ("P", "L", "RGB"):
+        save_kwargs: dict[str, Any] = {"comment": json_str.encode("utf-8")}
+        if getattr(img, "is_animated", False):
+            # Keep all frames, per-frame delays, and the loop count
+            save_kwargs["save_all"] = True
+            save_kwargs["duration"] = [
+                frame.info.get("duration", 100)
+                for frame in ImageSequence.Iterator(img)
+            ]
+            if "loop" in img.info:
+                save_kwargs["loop"] = img.info["loop"]
+            img.seek(0)
+        elif img.mode not in ("P", "L", "RGB"):
             img = img.convert("P", palette=Image.ADAPTIVE)
-        img.save(dst, "GIF", comment=json_str.encode("utf-8"))
+        img.save(dst, "GIF", **save_kwargs)
 
     elif fmt == "TIFF":
         # Official ImageDescription tag (270)

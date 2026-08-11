@@ -7,22 +7,22 @@
 | File | Purpose |
 |------|---------|
 | `coinceal.py` | CLI to generate P2WPKH keys and embed encrypted envelopes into image metadata |
-| `embed.html` | **Standalone web app** — generate keys & embed into PNG (same crypto as the CLI) |
+| `embed.html` | **Standalone web app** — generate keys & embed into PNG, JPEG, or GIF (same crypto as the CLI) |
 | `index.html` | **Standalone web app** — recover: drop image → balances → unlock WIF with password |
 | `test_*.png/jpg/gif/heic/webp/tiff` | Sample images already containing one encrypted envelope (password: `testpass123`) |
 | `testnet/` · `regtest/` | Same apps & CLI, defaulting to those networks |
 
 ## Supported formats & official fields
 
-| Format | Field used | Browser support in `index.html` |
-|--------|------------|---------------------------------|
-| **PNG**  | tEXt chunk `coinceal` | ✅ |
-| **JPEG** | EXIF UserComment (UNICODE) | ✅ |
-| **GIF**  | Comment Extension | ✅ |
-| **TIFF** | ImageDescription (tag 270) | ✅ |
-| **WebP** | EXIF UserComment (UNICODE) | ❌ (use Python tool) |
-| **HEIF / HEIC** | EXIF UserComment | ❌ (use Python tool) |
-| **BMP**  | *not supported* – no standard text metadata fields | — |
+| Format | Field used | Recover in `index.html` | Embed in `embed.html` |
+|--------|------------|-------------------------|-----------------------|
+| **PNG**  | tEXt chunk `coinceal` | ✅ | ✅ |
+| **JPEG** | EXIF UserComment (UNICODE) | ✅ | ✅ |
+| **GIF**  | Comment Extension | ✅ | ✅ (animations preserved) |
+| **TIFF** | ImageDescription (tag 270) | ✅ | ❌ (use Python tool) |
+| **WebP** | EXIF UserComment (UNICODE) | ❌ (use Python tool) | ❌ (use Python tool) |
+| **HEIF / HEIC** | EXIF UserComment | ❌ (use Python tool) | ❌ (use Python tool) |
+| **BMP**  | *not supported* – no standard text metadata fields | — | — |
 
 ## Quick start
 
@@ -53,8 +53,8 @@ Both pages are single self-contained HTML files (no external scripts).
 **Generate & embed** — open `embed.html`:
 - Choose network, optional extra entropy / seed
 - Set a password
-- Optionally drop a carrier PNG (or a blank one is created)
-- **Generate & embed** → download `coinceal.png`
+- Optionally drop a carrier PNG, JPEG, or GIF (or a blank PNG is created)
+- **Generate & embed** → download `coinceal.png` / `.jpg` / `.gif`
 - Works with the Recover page and with `coinceal.py extract`
 
 **Recover** — open `index.html`:
@@ -62,7 +62,9 @@ Both pages are single self-contained HTML files (no external scripts).
 - Click **Unlock private key** → enter the password → WIF is shown
 - Import the WIF into Electrum / Sparrow / BlueWallet to spend
 
-Browser embedding writes **PNG** metadata only. For JPEG / GIF / TIFF / WebP / HEIF use the Python CLI.
+Browser embedding writes **PNG, JPEG, and GIF** — losslessly: pixel and frame data are never re-encoded, so GIF animations survive intact. Existing metadata is preserved: JPEG EXIF (orientation, GPS, camera info, thumbnail) is carried over with only the envelope fields replaced, matching the Python CLI's behavior. For TIFF / WebP / HEIF use the Python CLI.
+
+When a JPEG is uploaded, a **Convert JPEG → PNG** toggle appears (on by default, recommended): the image is decoded pixel-for-pixel at the same resolution and the envelope goes into the PNG's custom text field instead of EXIF — more concealed (photo apps don't display it) and more durable (EXIF-scrubbing tools don't touch it). Conversion strips photo metadata unless the **Keep photo metadata** sub-option is checked, which copies the EXIF into the PNG's official `eXIf` chunk (thumbnail dropped, orientation baked into the pixels).
 
 ## Encryption (identical in Python & browser)
 
