@@ -720,9 +720,12 @@
     const usd = (sats / 1e8) * usdPerBtc;
     if (usd === 0) return "$0.00";
     if (usd < 0.01) return "< $0.01";
+    // Cents below $10, whole dollars above. min must not exceed max or
+    // toLocaleString throws a RangeError.
+    const digits = usd < 10 ? 2 : 0;
     return "$" + usd.toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: usd < 10 ? 2 : 0
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
     });
   }
 
@@ -825,6 +828,12 @@
             badge.textContent = "empty";
           }
         }
+      }).catch(e => {
+        // Never leave the spinner up: any unexpected render/format error
+        // degrades to the same state as a network failure.
+        console.warn("Balance render failed", e);
+        document.getElementById(`bal-${idx}`).textContent = "Balance unavailable (network)";
+        document.getElementById(`badge-${idx}`).textContent = "unknown";
       });
 
       card.addEventListener("click", async (ev) => {
